@@ -2,6 +2,7 @@ from homeassistant.components.notify.const import DOMAIN as NOTIFY_DOMAIN
 from homeassistant.components.notify.const import SERVICE_PERSISTENT_NOTIFICATION
 from homeassistant.core import HomeAssistant
 import typing as tp
+
 async def create_notification(hass: HomeAssistant, service_data: tp.Dict[str, str]) -> None:
     """Create HomeAssistant notification.
 
