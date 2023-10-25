@@ -2,5 +2,6 @@
     "domain": "report_service_robonomics",
     "name": "Robonomics Report Service",
     "config_flow": true,
-    "version": "0.1.0"
+    "version": "0.1.0",
+    "dependencies": ["notify"]
   }
