@@ -2,6 +2,7 @@ import logging
 import homeassistant.loader as loader
 import urllib.parse
 from .utils import create_report_notification
+from .frontend import async_register_frontend
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ class LoggerHandler(logging.Handler):
             if record.levelname == "ERROR" or record.levelname == "CRITICAL":
                 _LOGGER.info(record.msg)
                 encoded_description = urllib.parse.quote(record.msg)
-                link = f"/redirect-server-controls?description={encoded_description}"
+                link = f"/report-service?description={encoded_description}"
                 service_data = {
                     "message": f"Found an error: {record.msg}. [Click]({link})",
                     "title": "Send Report Service",
@@ -30,6 +31,7 @@ async def async_setup_entry(hass, entry) -> bool:
     root_logger_handler = LoggerHandler()
     root_logger_handler.set_hass(hass)
     root_logger.addHandler(root_logger_handler)
+    async_register_frontend(hass)
     return True
 
 async def async_setup(hass, config) -> bool:
