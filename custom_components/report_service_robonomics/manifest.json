@@ -3,5 +3,6 @@
     "name": "Robonomics Report Service",
     "config_flow": true,
     "version": "0.1.0",
-    "dependencies": ["notify"]
+    "dependencies": ["notify"],
+    "requirements": ["robonomics-interface~=1.6.0", "pinatapy-vourhey==0.1.9", "tenacity==8.2.2"]
   }
