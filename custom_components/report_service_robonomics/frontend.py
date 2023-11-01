@@ -22,3 +22,6 @@ def async_register_frontend(hass: HomeAssistant) -> None:
                 }
             },
         )
+
+def async_remove_frontend(hass: HomeAssistant) -> None:
+    hass.components.frontend.async_remove_panel("report-service")

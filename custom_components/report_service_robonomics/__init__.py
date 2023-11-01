@@ -4,11 +4,13 @@ import logging
 import os
 import urllib.parse
 
-from homeassistant.core import ServiceCall
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import ServiceCall, HomeAssistant
+from homeassistant.helpers.typing import ConfigType
 from substrateinterface import Keypair, KeypairType
 
-from .const import DOMAIN, IPFS_PROBLEM_REPORT_FOLDER, LOG_FILE_NAME, PROBLEM_REPORT_SERVICE, TRACES_FILE_NAME
-from .frontend import async_register_frontend
+from .const import DOMAIN, ROOT_LOGGER, LOGGER_HANDLER, IPFS_PROBLEM_REPORT_FOLDER, LOG_FILE_NAME, PROBLEM_REPORT_SERVICE, TRACES_FILE_NAME
+from .frontend import async_register_frontend, async_remove_frontend
 from .ipfs import pin_to_pinata
 from .robonomics import Robonomics
 from .utils import (
@@ -25,7 +27,7 @@ PROBLEM_SERVICE_ROBONOMICS_ADDRESS = "4HifM6Cny7bHAdLb5jw3hHV2KabuzRZV8gmHG1eh4P
 
 
 class LoggerHandler(logging.Handler):
-    def set_hass(self, hass):
+    def set_hass(self, hass: HomeAssistant):
         self.hass = hass
 
     def emit(self, record):
@@ -42,13 +44,16 @@ class LoggerHandler(logging.Handler):
                 self.hass.async_create_task(create_notification(self.hass, service_data))
 
 
-async def async_setup_entry(hass, entry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    hass.data.setdefault(DOMAIN, {})
     robonomics = Robonomics(hass)
     await robonomics.async_init()
     root_logger = logging.getLogger()
     root_logger_handler = LoggerHandler()
     root_logger_handler.set_hass(hass)
     root_logger.addHandler(root_logger_handler)
+    hass.data[DOMAIN][ROOT_LOGGER] = root_logger
+    hass.data[DOMAIN][LOGGER_HANDLER] = root_logger_handler
     async_register_frontend(hass)
 
     async def handle_problem_report(call: ServiceCall) -> None:
@@ -101,5 +106,18 @@ async def async_setup_entry(hass, entry) -> bool:
     return True
 
 
-async def async_setup(hass, config) -> bool:
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    return True
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry.
+    It calls during integration's removing.
+
+    :param hass: HomeAssistant instance
+    :param entry: Data from config
+
+    :return: True if all unload event were success
+    """
+    hass.data[DOMAIN][ROOT_LOGGER].removeHandler(hass.data[DOMAIN][LOGGER_HANDLER])
+    async_remove_frontend(hass)
     return True

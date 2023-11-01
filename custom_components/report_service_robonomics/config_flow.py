@@ -8,12 +8,6 @@ from homeassistant.data_entry_flow import FlowResult
 
 from .const import ADDRESS, DOMAIN
 
-STEP_USER_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Required(ADDRESS): str,
-    }
-)
-
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Odoo."""
@@ -26,11 +20,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         :return: Service functions from HomeAssistant
         """
 
-        info = {"title": "Robonomics Report Service"}
-        device_unique_id = "report_service_robonomics"
-        await self.async_set_unique_id(device_unique_id)
+        await self.async_set_unique_id(DOMAIN)
         self._abort_if_unique_id_configured()
-        if user_input is None:
-            return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
-        else:
-            return self.async_create_entry(title=info["title"], data=user_input)
+        if user_input is not None:
+            return self.async_create_entry(title="Robonomics Report Service", data={})
+
+        return self.async_show_form(step_id="user")

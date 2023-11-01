@@ -2,6 +2,7 @@
     "domain": "report_service_robonomics",
     "name": "Robonomics Report Service",
     "config_flow": true,
+    "codeowners": ["@pinoutcloud"],
     "version": "0.1.0",
     "dependencies": ["notify"],
     "requirements": ["robonomics-interface~=1.6.0", "pinatapy-vourhey==0.1.9", "tenacity==8.2.2"]
