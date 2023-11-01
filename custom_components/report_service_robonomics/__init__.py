@@ -9,6 +9,7 @@ from substrateinterface import Keypair, KeypairType
 
 from .const import DOMAIN, IPFS_PROBLEM_REPORT_FOLDER, LOG_FILE_NAME, PROBLEM_REPORT_SERVICE, TRACES_FILE_NAME
 from .frontend import async_register_frontend
+from .ipfs import pin_to_pinata
 from .robonomics import Robonomics
 from .utils import (
     create_encrypted_picture,
@@ -87,10 +88,7 @@ async def async_setup_entry(hass, entry) -> bool:
             encrypted_json = encrypt_message(json.dumps(json_text), sender_kp, receiver_kp.public_key)
             with open(f"{tempdir}/issue_description.json", "w") as f:
                 f.write(encrypted_json)
-            #######################################
-            # TODO: Add to pinata -> ipsf_hash
-            ipfs_hash = "QmRU6Bkrx3DGEQZTk7KBnnYfMoHMbTvx6p7aJqGxVE3pa6"
-            #######################################
+            ipfs_hash = await pin_to_pinata(hass, tempdir)
             await robonomics.send_launch(PROBLEM_SERVICE_ROBONOMICS_ADDRESS, ipfs_hash)
         except Exception as e:
             _LOGGER.debug(f"Exception in send problem service: {e}")

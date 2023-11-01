@@ -2,6 +2,7 @@ import asyncio
 import functools
 import logging
 import os
+import random
 import shutil
 import tempfile
 import typing as tp
@@ -105,40 +106,6 @@ def create_encrypted_picture(
     return picture_path
 
 
-def write_data_to_temp_file(data: tp.Union[str, bytes], config: bool = False, filename: str = None) -> str:
-    """
-    Create file and store data in it
-
-    :param data: data, which to be written to the file
-    :param config: is file fo config (True) or for telemetry (False)
-    :param filename: Name of the file if not config or z2m backup
-
-    :return: path to created file
-    """
-    dirname = tempfile.gettempdir()
-    if filename is not None:
-        filepath = f"{dirname}/{filename}"
-        if type(data) == str:
-            with open(filepath, "w") as f:
-                f.write(data)
-        else:
-            with open(filepath, "wb") as f:
-                f.write(data)
-    else:
-        if type(data) == str:
-            if config:
-                filepath = f"{dirname}/config_encrypted-{time.time()}"
-            else:
-                filepath = f"{dirname}/data-{time.time()}"
-            with open(filepath, "w") as f:
-                f.write(data)
-        else:
-            filepath = f"{dirname}/z2m-backup.zip"
-            with open(filepath, "wb") as f:
-                f.write(data)
-    return filepath
-
-
 def create_temp_dir_and_copy_files(
     dirname: str, files: tp.List[str], sender_seed: tp.Optional[str] = None, receiver_address: tp.Optional[str] = None
 ) -> str:
@@ -182,11 +149,3 @@ def delete_temp_dir(dirpath: str) -> None:
     """
     shutil.rmtree(dirpath)
 
-
-def delete_temp_file(filename: str) -> None:
-    """
-    Delete temporary file
-
-    :param filename: the name of the file to delete
-    """
-    os.remove(filename)
