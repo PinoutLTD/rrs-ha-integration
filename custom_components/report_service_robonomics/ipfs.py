@@ -4,13 +4,15 @@ import typing as tp
 from homeassistant.core import HomeAssistant
 from pinatapy import PinataPy
 
-from .const import ACCOUNT_SEED
+from .const import STORAGE_PINATA
 from .utils import async_load_from_store, async_save_to_store, to_thread
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def pin_to_pinata(hass: HomeAssistant, dirname: str) -> tp.Optional[str]:
+async def pin_to_pinata(
+    hass: HomeAssistant, dirname: str, pinata_public: str, pinata_secret: str
+) -> tp.Optional[str]:
     """Add file to Pinata service
 
     :param hass:  Home Assistant instance
@@ -20,13 +22,13 @@ async def pin_to_pinata(hass: HomeAssistant, dirname: str) -> tp.Optional[str]:
     """
 
     _LOGGER.debug(f"Start adding {dirname} to Pinata")
-    storage_data = await async_load_from_store(hass, ACCOUNT_SEED)
-    pinata = PinataPy(storage_data["pinata_pub"], storage_data["pinata_private"])
+    pinata = PinataPy(pinata_public, pinata_secret)
     ipfs_hash = await _pin_to_pinata(pinata, dirname)
+    storage_data = await async_load_from_store(hass, STORAGE_PINATA)
     if "last_ipfs_hash" in storage_data:
         await _unpin_from_pinata(pinata, storage_data["last_ipfs_hash"])
     storage_data["last_ipfs_hash"] = ipfs_hash
-    await async_save_to_store(hass, ACCOUNT_SEED, storage_data)
+    await async_save_to_store(hass, STORAGE_PINATA, storage_data)
     return ipfs_hash
 
 

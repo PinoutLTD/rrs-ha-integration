@@ -7,20 +7,28 @@ import shutil
 import tempfile
 import typing as tp
 
-from homeassistant.components.notify.const import DOMAIN as NOTIFY_DOMAIN
-from homeassistant.components.notify.const import SERVICE_PERSISTENT_NOTIFICATION
+from homeassistant.components.persistent_notification import DOMAIN as NOTIFY_DOMAIN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.json import JSONEncoder
 from homeassistant.helpers.storage import Store
 from robonomicsinterface import Account
 from substrateinterface import Keypair, KeypairType
 
+from .const import DOMAIN
+
 _LOGGER = logging.getLogger(__name__)
 
 VERSION_STORAGE = 6
+SERVICE_PERSISTENT_NOTIFICATION = "create"
 
 
-def encrypt_message(message: tp.Union[bytes, str], sender_keypair: Keypair, recipient_public_key: bytes) -> str:
+def encrypt_message(
+    message: tp.Union[bytes, str],
+    sender_keypair: Keypair = None,
+    sender_seed: str = None,
+    recipient_address: str = None,
+    recipient_public_key: bytes = None,
+) -> str:
     """Encrypt message with sender private key and recipient public key
 
     :param message: Message to encrypt
@@ -29,18 +37,25 @@ def encrypt_message(message: tp.Union[bytes, str], sender_keypair: Keypair, reci
 
     :return: encrypted message
     """
-
+    if sender_keypair is None:
+        sender_keypair = Account(sender_seed, crypto_type=KeypairType.ED25519).keypair
+    if recipient_public_key is None:
+        recipient_public_key = Keypair(
+            ss58_address=recipient_address, crypto_type=KeypairType.ED25519
+        ).public_key
     encrypted = sender_keypair.encrypt_message(message, recipient_public_key)
     return f"0x{encrypted.hex()}"
 
 
-async def create_notification(hass: HomeAssistant, service_data: tp.Dict[str, str]) -> None:
+async def create_notification(
+    hass: HomeAssistant, service_data: tp.Dict[str, str]
+) -> None:
     """Create HomeAssistant notification.
 
     :param hass: HomeAssistant instance
     :param service_data: Message for notification
     """
-
+    service_data["notification_id"] = DOMAIN
     await hass.services.async_call(
         domain=NOTIFY_DOMAIN,
         service=SERVICE_PERSISTENT_NOTIFICATION,
@@ -63,7 +78,13 @@ def _get_store_key(key):
 
 def _get_store_for_key(hass, key):
     """Create a Store object for the key."""
-    return Store(hass, VERSION_STORAGE, _get_store_key(key), encoder=JSONEncoder, atomic_writes=True)
+    return Store(
+        hass,
+        VERSION_STORAGE,
+        _get_store_key(key),
+        encoder=JSONEncoder,
+        atomic_writes=True,
+    )
 
 
 async def async_load_from_store(hass, key):
@@ -97,7 +118,9 @@ def create_encrypted_picture(
 ) -> str:
     sender_acc = Account(seed=sender_seed, crypto_type=KeypairType.ED25519)
     sender_kp = sender_acc.keypair
-    receiver_kp = Keypair(ss58_address=receiver_address, crypto_type=KeypairType.ED25519)
+    receiver_kp = Keypair(
+        ss58_address=receiver_address, crypto_type=KeypairType.ED25519
+    )
     encrypted_data = encrypt_message(data, sender_kp, receiver_kp.public_key)
     picture_path = f"{dirname}/picture{number_of_picture}"
     with open(picture_path, "w") as f:
@@ -107,7 +130,10 @@ def create_encrypted_picture(
 
 
 def create_temp_dir_and_copy_files(
-    dirname: str, files: tp.List[str], sender_seed: tp.Optional[str] = None, receiver_address: tp.Optional[str] = None
+    dirname: str,
+    files: tp.List[str],
+    sender_seed: tp.Optional[str] = None,
+    receiver_address: tp.Optional[str] = None,
 ) -> str:
     """
     Create directory in tepmoral directory and copy there files
@@ -130,8 +156,12 @@ def create_temp_dir_and_copy_files(
                     data = f.read()
                 sender_acc = Account(seed=sender_seed, crypto_type=KeypairType.ED25519)
                 sender_kp = sender_acc.keypair
-                receiver_kp = Keypair(ss58_address=receiver_address, crypto_type=KeypairType.ED25519)
-                encrypted_data = encrypt_message(data, sender_kp, receiver_kp.public_key)
+                receiver_kp = Keypair(
+                    ss58_address=receiver_address, crypto_type=KeypairType.ED25519
+                )
+                encrypted_data = encrypt_message(
+                    data, sender_kp, receiver_kp.public_key
+                )
                 with open(f"{dirpath}/{filename}", "w") as f:
                     f.write(encrypted_data)
             else:
@@ -148,4 +178,3 @@ def delete_temp_dir(dirpath: str) -> None:
     :param dirpath: the path to the directory
     """
     shutil.rmtree(dirpath)
-
