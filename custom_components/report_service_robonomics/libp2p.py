@@ -12,16 +12,16 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-async def get_pinata_creds(address: str, email: str):
+async def get_pinata_creds(controller_address: str, email: str, owner_address: str):
     try:
         async with websockets.connect(LIBP2P_WS_SERVER, ping_timeout=None) as websocket:
             _LOGGER.debug(f"Connected to WebSocket server at {LIBP2P_WS_SERVER}")
-            await websocket.send(
-                json.dumps(
-                    {"protocols_to_listen": [f"{LIBP2P_LISTEN_PROTOCOL}/{address}"]}
+            msg_to_ws = json.dumps(
+                    {"protocols_to_listen": [f"{LIBP2P_LISTEN_PROTOCOL}/{controller_address}"]}
                 )
-            )
-            data = {"email": email, "address": address}
+            await websocket.send(msg_to_ws)
+            _LOGGER.debug(f"Sent to websocket: {msg_to_ws}")
+            data = {"email": email, "controller_address": controller_address, "owner_address": owner_address}
             msg_to_ws = json.dumps(
                 {
                     "protocol": LIBP2P_SEND_PROTOCOL,
@@ -31,6 +31,7 @@ async def get_pinata_creds(address: str, email: str):
                 }
             )
             await websocket.send(msg_to_ws)
+            _LOGGER.debug(f"Sent to websocket: {msg_to_ws}")
             while True:
                 response = await websocket.recv()
                 _LOGGER.debug(f"Received message from server: {response}")

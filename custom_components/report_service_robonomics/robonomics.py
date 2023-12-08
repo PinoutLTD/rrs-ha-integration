@@ -2,7 +2,7 @@ import logging
 import time
 
 from homeassistant.core import HomeAssistant
-from robonomicsinterface import RWS, Account, Launch
+from robonomicsinterface import RWS, Account, Launch, CommonFunctions, Subscriber, SubEvent
 from substrateinterface import Keypair, KeypairType
 from substrateinterface.exceptions import SubstrateRequestException
 from tenacity import Retrying, stop_after_attempt, wait_fixed
@@ -37,14 +37,20 @@ class Robonomics:
         self.owner_address: str = owner_address
         self.owner_seed = owner_seed
         self.current_wss: str = ROBONOMICS_WSS[0]
+        self.balance_is_ok = False
 
     async def async_init(self) -> None:
-        await self._check_rws()
+        if not await self._check_rws():
+            await self._buy_rws()
         if not await self._check_rws_devices():
             await self._add_controller_to_devices()
 
     @to_thread
-    def _add_controller_to_devices(self) -> None:
+    def _buy_rws(self):
+        self._check_owner_balance()
+        while not self.balance_is_ok:
+            time.sleep(2)
+        _LOGGER.debug(f"Start buying RWS to {self.owner_address}")
         if self.owner_seed is not None:
             account = Account(
                 self.owner_seed,
@@ -52,9 +58,48 @@ class Robonomics:
                 remote_ws=self.current_wss,
             )
             rws = RWS(account)
-            rws.set_devices([self.controller_address])
+            auction = rws.get_auction_queue()[0]
+            res = rws.bid(auction, 10**9 + 1)
+            _LOGGER.debug(f"RWS was bought with result {res}")
+
+    def _check_owner_balance(self) -> bool:
+        if self.owner_seed is not None:
+            account = Account(
+                self.owner_seed,
+                crypto_type=KeypairType.ED25519,
+                remote_ws=self.current_wss,
+            )
+            common_functions = CommonFunctions(account)
+            account_info = common_functions.get_account_info()
+            balance = account_info['data']['free']/1000000000
+            _LOGGER.debug(f"Owner balance is {balance}")
+            if balance > 1:
+                self.balance_is_ok = True
+            else:
+                self.balance_is_ok = False
+                self.subscriber = Subscriber(account, SubEvent.Transfer, self._callback_event)
+            
+        _LOGGER.error("Owner seed is None. Can't buy subscription.")
+
+    def _callback_event(self, data):
+        if data['to'] == self.owner_address:
+            _LOGGER.debug(f"Got {data['amount']} XRT")
+            self.balance_is_ok = True
+            self.subscriber.cancel()
+
+    @to_thread
+    def _add_controller_to_devices(self) -> None:
+        _LOGGER.debug(f"Start add controller {self.controller_address} to RWS devices to owner {self.owner_address}")
+        if self.owner_seed is not None:
+            account = Account(
+                self.owner_seed,
+                crypto_type=KeypairType.ED25519,
+                remote_ws=self.current_wss,
+            )
+            rws = RWS(account)
+            res = rws.set_devices([self.controller_address])
             _LOGGER.debug(
-                f"Controller {self.controller_address} was added to RWS devices to owner {self.owner_address}"
+                f"Controller was added with result {res}"
             )
         else:
             _LOGGER.error("Owner seed is None. Can't add controller to devices.")
@@ -62,14 +107,17 @@ class Robonomics:
     @to_thread
     def _check_rws_devices(self) -> bool:
         rws = RWS(self.controller_account)
-        return self.controller_address in rws.get_devices(self.owner_address)
+        devices = rws.get_devices(self.owner_address)
+        _LOGGER.debug(f"RWS devices: {devices}")
+        return self.controller_address in devices
 
     @to_thread
-    def _check_rws(self) -> None:
+    def _check_rws(self) -> bool:
         rws = RWS(self.controller_account)
-        while rws.get_ledger(self.owner_address) is None:
-            time.sleep(1)
-        _LOGGER.debug(f"Account {self.owner_address} has RWS")
+        return rws.get_ledger(self.owner_address) is not None
+        # while rws.get_ledger(self.owner_address) is None:
+        #     time.sleep(1)
+        # _LOGGER.debug(f"Account {self.owner_address} has RWS")
 
     def _change_current_wss(self) -> None:
         """Set next current wss"""

@@ -6,6 +6,7 @@ from homeassistant import config_entries
 from homeassistant.helpers.event import async_call_later
 from homeassistant.data_entry_flow import FlowResult
 from robonomicsinterface import Account
+from substrateinterface import KeypairType
 
 from .const import (
     DOMAIN,
@@ -58,20 +59,18 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         async def _wait_for_payment(_=None):
             storage_data = await async_load_from_store(self.hass, STORAGE_ACCOUNT_SEED)
             # If Robonomics integration was configured, there will be controller seed and owner address in the storage
-            if (
-                CONF_CONTROLLER_SEED in storage_data
-                and CONF_OWNER_ADDRESS in storage_data
-            ):
+            if (CONF_CONTROLLER_SEED in storage_data and CONF_OWNER_ADDRESS in storage_data):
                 controller_seed = storage_data[CONF_CONTROLLER_SEED]
-                controller_account = Account(controller_seed)
+                controller_account = Account(controller_seed, crypto_type=KeypairType.ED25519)
                 owner_address = storage_data[CONF_OWNER_ADDRESS]
-                owner_seed = None
+                owner_seed = storage_data.get(CONF_OWNER_SEED)
             else:
                 controller_seed, controller_account = create_account()
                 owner_seed, owner_account = create_account()
                 owner_address = owner_account.get_address()
                 storage_data[CONF_CONTROLLER_SEED] = controller_seed
                 storage_data[CONF_OWNER_ADDRESS] = owner_address
+                storage_data[CONF_OWNER_SEED] = owner_seed
                 await async_save_to_store(self.hass, STORAGE_ACCOUNT_SEED, storage_data)
             encrypted_email = encrypt_message(
                 self.user_data["email"],
@@ -85,7 +84,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.user_data[CONF_CONTROLLER_SEED] = controller_seed
             self.user_data[CONF_OWNER_ADDRESS] = owner_address
             self.user_data[CONF_OWNER_SEED] = owner_seed
-            self.user_data[CONF_PINATA_SECRET] = pinata_creds["secret"]
+            self.user_data[CONF_PINATA_SECRET] = pinata_creds["private"]
             self.user_data[CONF_PINATA_PUBLIC] = pinata_creds["public"]
             self.hass.async_create_task(
                 self.hass.config_entries.flow.async_configure(flow_id=self.flow_id)

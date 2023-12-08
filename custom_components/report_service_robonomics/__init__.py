@@ -6,10 +6,13 @@ from homeassistant.core import ServiceCall, HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
+    CONF_CONTROLLER_SEED,
+    CONF_OWNER_ADDRESS,
     DOMAIN,
     ROOT_LOGGER,
     LOGGER_HANDLER,
     PROBLEM_REPORT_SERVICE,
+    CONF_OWNER_SEED,
 )
 from .frontend import async_register_frontend, async_remove_frontend
 from .robonomics import Robonomics
@@ -43,7 +46,7 @@ class LoggerHandler(logging.Handler):
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
-    robonomics = Robonomics(hass, entry.data["owner_seed"])
+    robonomics = Robonomics(hass, entry.data[CONF_CONTROLLER_SEED], entry.data[CONF_OWNER_ADDRESS], entry.data[CONF_OWNER_SEED])
     await robonomics.async_init()
     root_logger = logging.getLogger()
     root_logger_handler = LoggerHandler()
