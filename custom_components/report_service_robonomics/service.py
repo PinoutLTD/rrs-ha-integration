@@ -52,7 +52,7 @@ async def send_problem_report(
         tempdir = create_temp_dir_and_copy_files(
             IPFS_PROBLEM_REPORT_FOLDER,
             files,
-            robonomics.owner_seed,
+            robonomics.controller_seed,
             PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
         )
         if len(picture_data) != 0:
@@ -63,12 +63,12 @@ async def send_problem_report(
                     decoded_picture_data,
                     i,
                     tempdir,
-                    robonomics.owner_seed,
+                    robonomics.controller_seed,
                     PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
                 )
                 i += 1
         _LOGGER.debug(f"Tempdir for problem report created: {tempdir}")
-        sender_kp = robonomics.owner_account.keypair
+        sender_kp = robonomics.controller_account.keypair
         receiver_kp = Keypair(
             ss58_address=PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
             crypto_type=KeypairType.ED25519,

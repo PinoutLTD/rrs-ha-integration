@@ -25,9 +25,9 @@ SERVICE_PERSISTENT_NOTIFICATION = "create"
 def encrypt_message(
     message: tp.Union[bytes, str],
     sender_keypair: Keypair = None,
+    recipient_public_key: bytes = None,
     sender_seed: str = None,
     recipient_address: str = None,
-    recipient_public_key: bytes = None,
 ) -> str:
     """Encrypt message with sender private key and recipient public key
 
@@ -45,6 +45,28 @@ def encrypt_message(
         ).public_key
     encrypted = sender_keypair.encrypt_message(message, recipient_public_key)
     return f"0x{encrypted.hex()}"
+
+
+def decrypt_message(encrypted_message: str, sender_public_key: bytes = None, recipient_keypair: Keypair = None, sender_address: str = None, recipient_seed: str = None) -> str:
+    """Decrypt message with recepient private key and sender puplic key
+
+    :param encrypted_message: Message to decrypt
+    :param sender_public_key: Sender public key
+    :param recipient_keypair: Recepient account keypair
+
+    :return: Decrypted message
+    """
+    if recipient_keypair is None:
+        recipient_keypair = Account(recipient_seed, crypto_type=KeypairType.ED25519).keypair
+    if sender_public_key is None:
+        sender_public_key = Keypair(
+            ss58_address=sender_address, crypto_type=KeypairType.ED25519
+        ).public_key
+    if encrypted_message[:2] == "0x":
+        encrypted_message = encrypted_message[2:]
+    bytes_encrypted = bytes.fromhex(encrypted_message)
+
+    return recipient_keypair.decrypt_message(bytes_encrypted, sender_public_key)
 
 
 async def create_notification(

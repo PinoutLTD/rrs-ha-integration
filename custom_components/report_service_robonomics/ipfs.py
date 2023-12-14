@@ -21,7 +21,7 @@ async def pin_to_pinata(
     :return: IPFS hash of the file
     """
 
-    _LOGGER.debug(f"Start adding {dirname} to Pinata")
+    _LOGGER.debug(f"Start adding {dirname} to Pinata.")
     pinata = PinataPy(pinata_public, pinata_secret)
     ipfs_hash = await _pin_to_pinata(pinata, dirname)
     storage_data = await async_load_from_store(hass, STORAGE_PINATA)
