@@ -33,11 +33,9 @@ async def send_problem_report(
     try:
         picture_data = call.data.get("picture")
         problem_text = call.data.get("description")
-        email = call.data.get("mail")
         phone_number = call.data.get("phone_number", "")
         json_text = {
             "description": problem_text,
-            "e-mail": email,
             "phone_number": phone_number,
             "pictures_count": len(picture_data),
         }

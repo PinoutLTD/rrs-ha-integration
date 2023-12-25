@@ -4,8 +4,7 @@ import typing as tp
 from homeassistant.core import HomeAssistant
 from pinatapy import PinataPy
 
-from .const import STORAGE_PINATA
-from .utils import async_load_from_store, async_save_to_store, to_thread
+from .utils import to_thread
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,11 +23,6 @@ async def pin_to_pinata(
     _LOGGER.debug(f"Start adding {dirname} to Pinata.")
     pinata = PinataPy(pinata_public, pinata_secret)
     ipfs_hash = await _pin_to_pinata(pinata, dirname)
-    storage_data = await async_load_from_store(hass, STORAGE_PINATA)
-    if "last_ipfs_hash" in storage_data:
-        await _unpin_from_pinata(pinata, storage_data["last_ipfs_hash"])
-    storage_data["last_ipfs_hash"] = ipfs_hash
-    await async_save_to_store(hass, STORAGE_PINATA, storage_data)
     return ipfs_hash
 
 
@@ -43,11 +37,3 @@ def _pin_to_pinata(pinata: PinataPy, dirname: str) -> tp.Optional[str]:
     except Exception as e:
         _LOGGER.error(f"Exception in pinata pin: {e}, pinata response: {res}")
 
-
-@to_thread
-def _unpin_from_pinata(pinata: PinataPy, ipfs_hash: str) -> None:
-    try:
-        pinata.remove_pin_from_ipfs(ipfs_hash)
-        _LOGGER.debug(f"Hash {ipfs_hash} was unpinned from Pinata")
-    except Exception as e:
-        _LOGGER.debug(f"Exception in unpinning file from Pinata: {e}")

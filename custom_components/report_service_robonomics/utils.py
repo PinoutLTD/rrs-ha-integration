@@ -14,7 +14,7 @@ from homeassistant.helpers.storage import Store
 from robonomicsinterface import Account
 from substrateinterface import Keypair, KeypairType
 
-from .const import DOMAIN
+from .const import DOMAIN, LOGS_MAX_LEN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -176,6 +176,7 @@ def create_temp_dir_and_copy_files(
             if sender_seed and receiver_address:
                 with open(filepath, "r") as f:
                     data = f.read()
+                data = data[-LOGS_MAX_LEN:]
                 sender_acc = Account(seed=sender_seed, crypto_type=KeypairType.ED25519)
                 sender_kp = sender_acc.keypair
                 receiver_kp = Keypair(

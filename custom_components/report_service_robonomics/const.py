@@ -2,7 +2,6 @@ DOMAIN = "report_service_robonomics"
 ADDRESS = "address"
 
 STORAGE_ACCOUNT_SEED = "account_seed"
-STORAGE_PINATA = "pinata_report"
 
 CONF_EMAIL = "email"
 CONF_OWNER_SEED = "owner_seed"
@@ -21,6 +20,7 @@ PROBLEM_REPORT_SERVICE = "report_an_issue"
 LOG_FILE_NAME = "home-assistant.log"
 TRACES_FILE_NAME = ".storage/trace.saved_traces"
 IPFS_PROBLEM_REPORT_FOLDER = "ha_problem_report"
+LOGS_MAX_LEN = 9*1024*1024
 
 ROOT_LOGGER = "root_logger"
 LOGGER_HANDLER = "logger_handler"
