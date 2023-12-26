@@ -62,7 +62,7 @@ class Robonomics:
             res = rws.bid(auction, 10**9 + 1)
             _LOGGER.debug(f"RWS was bought with result {res}")
 
-    def _check_owner_balance(self) -> bool:
+    def _get_owner_balance(self) -> float:
         if self.owner_seed is not None:
             account = Account(
                 self.owner_seed,
@@ -73,19 +73,26 @@ class Robonomics:
             account_info = common_functions.get_account_info()
             balance = account_info['data']['free']/1000000000
             _LOGGER.debug(f"Owner balance is {balance}")
-            if balance > 1:
-                self.balance_is_ok = True
-            else:
-                self.balance_is_ok = False
-                self.subscriber = Subscriber(account, SubEvent.Transfer, self._callback_event)
+        else:
+            _LOGGER.error("Owner seed is None. Can't buy subscription.")
+
+    def _check_owner_balance(self) -> bool:
+        balance = self._get_owner_balance()
+        if balance > 1:
+            self.balance_is_ok = True
+        else:
+            self.balance_is_ok = False
+            self.subscriber = Subscriber(Account(), SubEvent.Transfer, self._callback_event)
             
-        _LOGGER.error("Owner seed is None. Can't buy subscription.")
 
     def _callback_event(self, data):
         if data['to'] == self.owner_address:
             _LOGGER.debug(f"Got {data['amount']} XRT")
-            self.balance_is_ok = True
-            self.subscriber.cancel()
+            if self._get_owner_balance() > 1:
+                self.balance_is_ok = True
+                self.subscriber.cancel()
+            else:
+                _LOGGER.debug("Balance is not enough, wait for more xrt")
 
     @to_thread
     def _add_controller_to_devices(self) -> None:

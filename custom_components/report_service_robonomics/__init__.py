@@ -7,19 +7,23 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import (
     CONF_CONTROLLER_SEED,
+    CONF_EMAIL,
     CONF_OWNER_ADDRESS,
     DOMAIN,
     ROOT_LOGGER,
     LOGGER_HANDLER,
     PROBLEM_REPORT_SERVICE,
     CONF_OWNER_SEED,
+    STORAGE_PINATA_CREDS,
+    CONF_PINATA_PUBLIC,
+    CONF_PINATA_SECRET,
+    ROBONOMICS,
 )
 from .frontend import async_register_frontend, async_remove_frontend
 from .robonomics import Robonomics
-from .utils import (
-    create_notification,
-)
+from .utils import create_notification, async_load_from_store
 from .service import send_problem_report
+from .libp2p import get_pinata_creds
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,10 +48,26 @@ class LoggerHandler(logging.Handler):
                 )
 
 
+async def wait_for_pinata_creds(hass: HomeAssistant, entry: ConfigEntry):
+    storage_data = await async_load_from_store(hass, STORAGE_PINATA_CREDS)
+    if CONF_PINATA_PUBLIC not in storage_data and CONF_PINATA_SECRET not in storage_data:
+        await get_pinata_creds(
+            hass,
+            entry.data[CONF_CONTROLLER_SEED],
+            entry.data[CONF_EMAIL],
+            entry.data[CONF_OWNER_ADDRESS],
+        )
+    hass.data[DOMAIN][ROBONOMICS] = Robonomics(
+        hass,
+        entry.data[CONF_CONTROLLER_SEED],
+        entry.data[CONF_OWNER_ADDRESS],
+        entry.data.get(CONF_OWNER_SEED),
+    )
+    await hass.data[DOMAIN][ROBONOMICS].async_init()
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
-    robonomics = Robonomics(hass, entry.data[CONF_CONTROLLER_SEED], entry.data[CONF_OWNER_ADDRESS], entry.data[CONF_OWNER_SEED])
-    await robonomics.async_init()
     root_logger = logging.getLogger()
     root_logger_handler = LoggerHandler()
     root_logger_handler.set_hass(hass)
@@ -57,9 +77,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async_register_frontend(hass)
 
     async def handle_problem_report(call: ServiceCall) -> None:
-        await send_problem_report(hass, call, robonomics, entry.data)
+        storage_data = await async_load_from_store(hass, STORAGE_PINATA_CREDS)
+        if CONF_PINATA_PUBLIC in storage_data and CONF_PINATA_SECRET in storage_data and ROBONOMICS in hass.data[DOMAIN]:
+            await send_problem_report(hass, call, hass.data[DOMAIN][ROBONOMICS], storage_data)
 
     hass.services.async_register(DOMAIN, PROBLEM_REPORT_SERVICE, handle_problem_report)
+    entry.async_create_task(hass, wait_for_pinata_creds(hass, entry))
 
     return True
 

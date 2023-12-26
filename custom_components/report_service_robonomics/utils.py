@@ -47,7 +47,7 @@ def encrypt_message(
     return f"0x{encrypted.hex()}"
 
 
-def decrypt_message(encrypted_message: str, sender_public_key: bytes = None, recipient_keypair: Keypair = None, sender_address: str = None, recipient_seed: str = None) -> str:
+def decrypt_message(encrypted_message: str, sender_public_key: bytes = None, recipient_keypair: Keypair = None, sender_address: str = None, recipient_seed: str = None) -> bytes:
     """Decrypt message with recepient private key and sender puplic key
 
     :param encrypted_message: Message to decrypt

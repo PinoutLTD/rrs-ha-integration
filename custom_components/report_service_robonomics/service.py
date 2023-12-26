@@ -28,7 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def send_problem_report(
-    hass: HomeAssistant, call: ServiceCall, robonomics: Robonomics, entry_data
+    hass: HomeAssistant, call: ServiceCall, robonomics: Robonomics, storage_data: dict
 ) -> None:
     try:
         picture_data = call.data.get("picture")
@@ -79,8 +79,8 @@ async def send_problem_report(
         ipfs_hash = await pin_to_pinata(
             hass,
             tempdir,
-            entry_data[CONF_PINATA_PUBLIC],
-            entry_data[CONF_PINATA_SECRET],
+            storage_data[CONF_PINATA_PUBLIC],
+            storage_data[CONF_PINATA_SECRET],
         )
         await robonomics.send_launch(PROBLEM_SERVICE_ROBONOMICS_ADDRESS, ipfs_hash)
     except Exception as e:

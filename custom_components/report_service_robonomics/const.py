@@ -2,6 +2,7 @@ DOMAIN = "report_service_robonomics"
 ADDRESS = "address"
 
 STORAGE_ACCOUNT_SEED = "account_seed"
+STORAGE_PINATA_CREDS = "pinata_creds"
 
 CONF_EMAIL = "email"
 CONF_OWNER_SEED = "owner_seed"
@@ -32,3 +33,6 @@ LIBP2P_LISTEN_PROTOCOL = "/pinataCreds"
 LIBP2P_SEND_PROTOCOL = "/initialization"
 INTEGRATOR_PEER_ID = "QmNfeYKDyXZ34TEocB2T4KE1MCK4vhjrdjPz7MJUdAnJ1r"
 PROBLEM_SERVICE_ROBONOMICS_ADDRESS = "4HifM6Cny7bHAdLb5jw3hHV2KabuzRZV8gmHG1eh4PxJakwi"
+
+FRONTEND_URL = "/rrs/frontend"
+ROBONOMICS = "robonomics"
