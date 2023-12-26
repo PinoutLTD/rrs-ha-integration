@@ -1,4 +1,4 @@
-DOMAIN = "report_service_robonomics"
+DOMAIN = "robonomics_report_service"
 ADDRESS = "address"
 
 STORAGE_ACCOUNT_SEED = "account_seed"

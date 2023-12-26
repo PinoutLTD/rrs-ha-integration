@@ -1,5 +1,5 @@
 {
-    "domain": "report_service_robonomics",
+    "domain": "robonomics_report_service",
     "name": "Robonomics Report Service",
     "config_flow": true,
     "codeowners": ["@pinoutcloud"],
