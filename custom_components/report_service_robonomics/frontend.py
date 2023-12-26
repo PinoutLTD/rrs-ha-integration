@@ -3,12 +3,13 @@ from __future__ import annotations
 
 from homeassistant.core import HomeAssistant, callback
 
-from .const import DOMAIN
-
+from .const import DOMAIN, FRONTEND_URL
+from .rrs_frontend import get_path
 
 @callback
 def async_register_frontend(hass: HomeAssistant) -> None:
     """Register the frontend."""
+    hass.http.register_static_path(FRONTEND_URL, get_path(), cache_headers=False)
     if DOMAIN not in hass.data.get("frontend_panels", {}):
         hass.components.frontend.async_register_built_in_panel(
             component_name="custom",
@@ -18,7 +19,7 @@ def async_register_frontend(hass: HomeAssistant) -> None:
             config={
                 "_panel_custom": {
                     "name": "robonomics-panel",
-                    "module_url": "/local/robonomics-panel.js",
+                    "module_url": f"{FRONTEND_URL}/robonomics-panel.js",
                 }
             },
         )
