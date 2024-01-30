@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from homeassistant.core import HomeAssistant, callback
 
-from .const import DOMAIN, FRONTEND_URL
+from .const import DOMAIN, FRONTEND_URL, FRONTEND_URL_PUBLIC
 from .rrs_frontend import get_path
 
 @callback
@@ -15,7 +15,7 @@ def async_register_frontend(hass: HomeAssistant) -> None:
             component_name="custom",
             sidebar_title="Report an Issue",
             sidebar_icon="mdi:server",
-            frontend_url_path="report-service",
+            frontend_url_path=FRONTEND_URL_PUBLIC,
             config={
                 "_panel_custom": {
                     "name": "robonomics-panel",
@@ -26,4 +26,4 @@ def async_register_frontend(hass: HomeAssistant) -> None:
 
 
 def async_remove_frontend(hass: HomeAssistant) -> None:
-    hass.components.frontend.async_remove_panel("report-service")
+    hass.components.frontend.async_remove_panel(FRONTEND_URL_PUBLIC)

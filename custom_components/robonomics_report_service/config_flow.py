@@ -3,30 +3,21 @@ import logging
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.helpers.event import async_call_later
 from homeassistant.data_entry_flow import FlowResult
-from robonomicsinterface import Account
-from substrateinterface import KeypairType
 
 from .const import (
     DOMAIN,
     CONF_EMAIL,
     CONF_OWNER_SEED,
-    PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
-    CONF_PINATA_SECRET,
-    CONF_PINATA_PUBLIC,
     STORAGE_ACCOUNT_SEED,
     CONF_OWNER_ADDRESS,
     CONF_CONTROLLER_SEED,
 )
 from .utils import (
-    encrypt_message,
     async_load_from_store,
     async_save_to_store,
-    decrypt_message,
 )
-from .libp2p import get_pinata_creds
-from .robonomics import create_account
+from .robonomics import create_account, get_address_for_seed
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -84,4 +75,5 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self.user_data[CONF_CONTROLLER_SEED] = controller_seed
         self.user_data[CONF_OWNER_ADDRESS] = owner_address
         self.user_data[CONF_OWNER_SEED] = owner_seed
+        _LOGGER.debug(f"Finished configuration. Owner address: {owner_address}, controller_address: {get_address_for_seed(controller_seed)}")
 

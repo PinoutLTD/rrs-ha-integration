@@ -4,7 +4,8 @@ import typing as tp
 from homeassistant.core import HomeAssistant
 from pinatapy import PinataPy
 
-from .utils import to_thread
+from .utils import to_thread, async_load_from_store
+from .const import STORAGE_PINATA_CREDS, CONF_PINATA_PUBLIC, CONF_PINATA_SECRET
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,3 +38,8 @@ def _pin_to_pinata(pinata: PinataPy, dirname: str) -> tp.Optional[str]:
     except Exception as e:
         _LOGGER.error(f"Exception in pinata pin: {e}, pinata response: {res}")
 
+async def pinata_creds_exists(hass: HomeAssistant) -> bool:
+    storage_data = await async_load_from_store(hass, STORAGE_PINATA_CREDS)
+    res = CONF_PINATA_PUBLIC in storage_data and CONF_PINATA_SECRET in storage_data
+    _LOGGER.debug(f"Pinata creds exists: {res}")
+    return res

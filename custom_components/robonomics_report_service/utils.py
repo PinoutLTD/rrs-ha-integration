@@ -14,13 +14,27 @@ from homeassistant.helpers.storage import Store
 from robonomicsinterface import Account
 from substrateinterface import Keypair, KeypairType
 
-from .const import DOMAIN, LOGS_MAX_LEN
+from .const import DOMAIN, LOGS_MAX_LEN, SERVICE_STATUS
 
 _LOGGER = logging.getLogger(__name__)
 
 VERSION_STORAGE = 6
 SERVICE_PERSISTENT_NOTIFICATION = "create"
 
+class ReportServiceStatus:
+    WaitPinataCreds: str = "Waiting for payment"
+    WaitTokens: str = "Service got the payment, waiting for tokens"
+    BuyingRWS: str = "Service got tokens, buying the subscription"
+    Work: str = "Service is working"
+
+    @classmethod
+    def status_valid(cls, status: str) -> bool:
+        return (status == cls.WaitTokens) or (status == cls.WaitPinataCreds) or (status == cls.BuyingRWS) or (status == cls.Work) 
+
+def set_service_status(hass: HomeAssistant, status: str):
+    if ReportServiceStatus.status_valid(status):
+        _LOGGER.debug(f"Status changed from {hass.data[DOMAIN].get(SERVICE_STATUS)} to {status}")
+        hass.data[DOMAIN][SERVICE_STATUS] = status
 
 def encrypt_message(
     message: tp.Union[bytes, str],
@@ -47,7 +61,13 @@ def encrypt_message(
     return f"0x{encrypted.hex()}"
 
 
-def decrypt_message(encrypted_message: str, sender_public_key: bytes = None, recipient_keypair: Keypair = None, sender_address: str = None, recipient_seed: str = None) -> bytes:
+def decrypt_message(
+    encrypted_message: str,
+    sender_public_key: bytes = None,
+    recipient_keypair: Keypair = None,
+    sender_address: str = None,
+    recipient_seed: str = None,
+) -> bytes:
     """Decrypt message with recepient private key and sender puplic key
 
     :param encrypted_message: Message to decrypt
@@ -57,7 +77,9 @@ def decrypt_message(encrypted_message: str, sender_public_key: bytes = None, rec
     :return: Decrypted message
     """
     if recipient_keypair is None:
-        recipient_keypair = Account(recipient_seed, crypto_type=KeypairType.ED25519).keypair
+        recipient_keypair = Account(
+            recipient_seed, crypto_type=KeypairType.ED25519
+        ).keypair
     if sender_public_key is None:
         sender_public_key = Keypair(
             ss58_address=sender_address, crypto_type=KeypairType.ED25519
@@ -112,6 +134,11 @@ def _get_store_for_key(hass, key):
 async def async_load_from_store(hass, key):
     """Load the retained data from store and return de-serialized data."""
     return await _get_store_for_key(hass, key).async_load() or {}
+
+
+async def async_remove_store(hass: HomeAssistant, key: str):
+    """Remove data from store for given key"""
+    await _get_store_for_key(hass, key).async_remove()
 
 
 async def async_save_to_store(hass, key, data):

@@ -2,13 +2,21 @@ import logging
 import time
 
 from homeassistant.core import HomeAssistant
-from robonomicsinterface import RWS, Account, Launch, CommonFunctions, Subscriber, SubEvent
+from robonomicsinterface import (
+    RWS,
+    Account,
+    Launch,
+    CommonFunctions,
+    Subscriber,
+    SubEvent,
+)
 from substrateinterface import Keypair, KeypairType
 from substrateinterface.exceptions import SubstrateRequestException
 from tenacity import Retrying, stop_after_attempt, wait_fixed
+import typing as tp
 
-from .const import ROBONOMICS_WSS
-from .utils import to_thread
+from .const import ROBONOMICS_WSS, DOMAIN, SERVICE_STATUS
+from .utils import to_thread, ReportServiceStatus, set_service_status
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,6 +26,11 @@ def create_account() -> (str, Account):
     seed = Keypair.generate_mnemonic()
     account = Account(seed, crypto_type=KeypairType.ED25519)
     return seed, account
+
+
+def get_address_for_seed(seed: str) -> str:
+    acc = Account(seed, crypto_type=KeypairType.ED25519)
+    return acc.get_address()
 
 
 class Robonomics:
@@ -40,16 +53,32 @@ class Robonomics:
         self.balance_is_ok = False
 
     async def async_init(self) -> None:
-        if not await self._check_rws():
+        if not await self.get_rws_left_days():
             await self._buy_rws()
         if not await self._check_rws_devices():
             await self._add_controller_to_devices()
+        set_service_status(self.hass, ReportServiceStatus.Work)
+
+    @to_thread
+    def get_rws_left_days(self) -> tp.Optional[int]:
+        rws = RWS(Account(remote_ws=self.current_wss))
+        left_days = rws.get_days_left(addr=self.owner_address)
+        _LOGGER.debug(
+            f"Subscription is active: {bool(left_days)}, left days: {left_days}"
+        )
+        if not left_days:
+            set_service_status(self.hass, ReportServiceStatus.WaitPinataCreds)
+        else:
+            set_service_status(self.hass, ReportServiceStatus.Work)
+        return left_days
 
     @to_thread
     def _buy_rws(self):
         self._check_owner_balance()
         while not self.balance_is_ok:
+            set_service_status(self.hass, ReportServiceStatus.WaitTokens)
             time.sleep(2)
+        set_service_status(self.hass, ReportServiceStatus.BuyingRWS)
         _LOGGER.debug(f"Start buying RWS to {self.owner_address}")
         if self.owner_seed is not None:
             account = Account(
@@ -71,8 +100,9 @@ class Robonomics:
             )
             common_functions = CommonFunctions(account)
             account_info = common_functions.get_account_info()
-            balance = account_info['data']['free']/1000000000
+            balance = account_info["data"]["free"] / 1000000000
             _LOGGER.debug(f"Owner balance is {balance}")
+            return balance
         else:
             _LOGGER.error("Owner seed is None. Can't buy subscription.")
 
@@ -82,11 +112,12 @@ class Robonomics:
             self.balance_is_ok = True
         else:
             self.balance_is_ok = False
-            self.subscriber = Subscriber(Account(), SubEvent.Transfer, self._callback_event)
-            
+            self.subscriber = Subscriber(
+                Account(), SubEvent.Transfer, self._callback_event
+            )
 
     def _callback_event(self, data):
-        if data['to'] == self.owner_address:
+        if data["to"] == self.owner_address:
             _LOGGER.debug(f"Got {data['amount']} XRT")
             if self._get_owner_balance() > 1:
                 self.balance_is_ok = True
@@ -96,7 +127,9 @@ class Robonomics:
 
     @to_thread
     def _add_controller_to_devices(self) -> None:
-        _LOGGER.debug(f"Start add controller {self.controller_address} to RWS devices to owner {self.owner_address}")
+        _LOGGER.debug(
+            f"Start add controller {self.controller_address} to RWS devices to owner {self.owner_address}"
+        )
         if self.owner_seed is not None:
             account = Account(
                 self.owner_seed,
@@ -105,9 +138,7 @@ class Robonomics:
             )
             rws = RWS(account)
             res = rws.set_devices([self.controller_address])
-            _LOGGER.debug(
-                f"Controller was added with result {res}"
-            )
+            _LOGGER.debug(f"Controller was added with result {res}")
         else:
             _LOGGER.error("Owner seed is None. Can't add controller to devices.")
 
@@ -115,16 +146,9 @@ class Robonomics:
     def _check_rws_devices(self) -> bool:
         rws = RWS(self.controller_account)
         devices = rws.get_devices(self.owner_address)
-        _LOGGER.debug(f"RWS devices: {devices}")
-        return self.controller_address in devices
-
-    @to_thread
-    def _check_rws(self) -> bool:
-        rws = RWS(self.controller_account)
-        return rws.get_ledger(self.owner_address) is not None
-        # while rws.get_ledger(self.owner_address) is None:
-        #     time.sleep(1)
-        # _LOGGER.debug(f"Account {self.owner_address} has RWS")
+        res = self.controller_address in devices
+        _LOGGER.debug(f"RWS devices: {devices}, controller in devices: {res}")
+        return res
 
     def _change_current_wss(self) -> None:
         """Set next current wss"""

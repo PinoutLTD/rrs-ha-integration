@@ -17,6 +17,7 @@ class ExamplePanel extends LitElement {
       uselogs: { type: Boolean },
       pictures: { type: Array },
       initialDescription: { type: String },
+      serviceStatus: {type: String},
     };
   }
 
@@ -27,6 +28,7 @@ class ExamplePanel extends LitElement {
     this.uselogs = true;
     this.pictures = [];
     this.initialDescription = '';
+    this.serviceStatus = 'No status';
   }
 
   connectedCallback() {
@@ -42,7 +44,22 @@ class ExamplePanel extends LitElement {
     if (!this.description && this.initialDescription) {
       this.description = this.initialDescription;
     }
-
+    this.hass.connection.sendMessagePromise(
+        {type: "report-service/check_subscription"}
+      ).then(
+        (resp) => {
+          this.serviceStatus = resp;
+        }
+      )
+    if (this.serviceStatus != "Service is working") {
+      return html`
+      <div
+        class="header">
+        Report an Issue
+      </div>
+      <h1 style="text-align: center;"><span style="color: #808080;"><strong>${this.serviceStatus}</strong></span></h1>
+      `;
+    }
     return html`
     <div
       class="header">
@@ -214,7 +231,7 @@ class ExamplePanel extends LitElement {
     const button = this.shadowRoot.querySelector('.ha-styled-button');
     button.disabled = true; // Disable the button
 
-    this.hass.callService('robonomics_report_service', 'report_an_issue', {
+    this.hass.callService('report_service_robonomics', 'report_an_issue', {
       description: this.description,
       phone_number: this.phone,
       attach_logs: this.uselogs,

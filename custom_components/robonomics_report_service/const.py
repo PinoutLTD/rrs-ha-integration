@@ -34,5 +34,9 @@ LIBP2P_SEND_PROTOCOL = "/initialization"
 INTEGRATOR_PEER_ID = "QmNfeYKDyXZ34TEocB2T4KE1MCK4vhjrdjPz7MJUdAnJ1r"
 PROBLEM_SERVICE_ROBONOMICS_ADDRESS = "4HifM6Cny7bHAdLb5jw3hHV2KabuzRZV8gmHG1eh4PxJakwi"
 
+FRONTEND_URL_PUBLIC = "report-service"
 FRONTEND_URL = "/rrs/frontend"
 ROBONOMICS = "robonomics"
+SERVICE_STATUS = "service_status"
+
+RWS_CHECK_UNSUB = "rws_check_unsub"

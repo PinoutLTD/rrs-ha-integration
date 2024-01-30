@@ -7,6 +7,7 @@ from robonomicsinterface import Account
 from substrateinterface import KeypairType
 
 from .const import (
+    DOMAIN,
     LIBP2P_WS_SERVER,
     LIBP2P_LISTEN_PROTOCOL,
     LIBP2P_SEND_PROTOCOL,
@@ -14,16 +15,25 @@ from .const import (
     STORAGE_PINATA_CREDS,
     PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
     CONF_PINATA_PUBLIC,
-    CONF_PINATA_SECRET
+    CONF_PINATA_SECRET,
+    SERVICE_STATUS,
 )
-from .utils import async_save_to_store, decrypt_message, encrypt_message
+from .utils import (
+    async_save_to_store,
+    decrypt_message,
+    encrypt_message,
+    ReportServiceStatus,
+    set_service_status,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def get_pinata_creds(
     hass: HomeAssistant, controller_seed: str, email: str, owner_address: str
-):
+) -> bool:
+    _LOGGER.debug("Start requesting Pinata credentials")
+    set_service_status(hass, ReportServiceStatus.WaitPinataCreds)
     try:
         controller_address = Account(
             seed=controller_seed, crypto_type=KeypairType.ED25519
@@ -31,8 +41,14 @@ async def get_pinata_creds(
         async with websockets.connect(LIBP2P_WS_SERVER, ping_timeout=None) as websocket:
             _LOGGER.debug(f"Connected to WebSocket server at {LIBP2P_WS_SERVER}")
             await _subscribe_to_protocol(websocket, controller_address)
-            encrypted_email = encrypt_message(email, sender_seed=controller_seed, recipient_address=PROBLEM_SERVICE_ROBONOMICS_ADDRESS)
-            await _send_init_request(websocket, encrypted_email, controller_address, owner_address)
+            encrypted_email = encrypt_message(
+                email,
+                sender_seed=controller_seed,
+                recipient_address=PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
+            )
+            await _send_init_request(
+                websocket, encrypted_email, controller_address, owner_address
+            )
             while True:
                 response = await websocket.recv()
                 _LOGGER.debug(f"Received message from server: {response}")
@@ -58,10 +74,13 @@ async def get_pinata_creds(
                         STORAGE_PINATA_CREDS,
                         storage_data,
                     )
+                    return True
     except websockets.exceptions.ConnectionClosedOK:
         _LOGGER.debug(f"Websockets connection closed")
+        return False
     except Exception as e:
         _LOGGER.error(f"Websocket exception: {e}")
+        return False
 
 
 async def _subscribe_to_protocol(websocket, controller_address):
