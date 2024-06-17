@@ -16,6 +16,7 @@ from .const import (
 from .utils import (
     async_load_from_store,
     async_save_to_store,
+    get_robonomics_accounts_if_exists,
 )
 from .robonomics import create_account, get_address_for_seed
 
@@ -65,9 +66,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             owner_address = storage_data[CONF_OWNER_ADDRESS]
             owner_seed = storage_data.get(CONF_OWNER_SEED)
         else:
-            controller_seed, _ = create_account()
-            owner_seed, owner_account = create_account()
-            owner_address = owner_account.get_address()
+            robonomics_data = await get_robonomics_accounts_if_exists(self.hass)
+            if robonomics_data is not None:
+                controller_seed = robonomics_data[CONF_CONTROLLER_SEED]
+                owner_address = robonomics_data[CONF_OWNER_ADDRESS]
+                owner_seed = None
+            else:
+                controller_seed, _ = create_account()
+                owner_seed, owner_account = create_account()
+                owner_address = owner_account.get_address()
             storage_data[CONF_CONTROLLER_SEED] = controller_seed
             storage_data[CONF_OWNER_ADDRESS] = owner_address
             storage_data[CONF_OWNER_SEED] = owner_seed

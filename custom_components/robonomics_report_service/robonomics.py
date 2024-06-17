@@ -78,6 +78,7 @@ class Robonomics:
         while not self.balance_is_ok:
             set_service_status(self.hass, ReportServiceStatus.WaitTokens)
             time.sleep(2)
+            self._check_owner_balance()
         set_service_status(self.hass, ReportServiceStatus.BuyingRWS)
         _LOGGER.debug(f"Start buying RWS to {self.owner_address}")
         if self.owner_seed is not None:

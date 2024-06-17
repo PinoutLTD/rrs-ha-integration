@@ -231,7 +231,7 @@ class ExamplePanel extends LitElement {
     const button = this.shadowRoot.querySelector('.ha-styled-button');
     button.disabled = true; // Disable the button
 
-    this.hass.callService('report_service_robonomics', 'report_an_issue', {
+    this.hass.callService('robonomics_report_service', 'report_an_issue', {
       description: this.description,
       phone_number: this.phone,
       attach_logs: this.uselogs,

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.components.frontend import async_remove_panel, async_register_built_in_panel
 
 from .const import DOMAIN, FRONTEND_URL, FRONTEND_URL_PUBLIC
 from .rrs_frontend import get_path
@@ -11,7 +12,8 @@ def async_register_frontend(hass: HomeAssistant) -> None:
     """Register the frontend."""
     hass.http.register_static_path(FRONTEND_URL, get_path(), cache_headers=False)
     if DOMAIN not in hass.data.get("frontend_panels", {}):
-        hass.components.frontend.async_register_built_in_panel(
+        async_register_built_in_panel(
+            hass,
             component_name="custom",
             sidebar_title="Report an Issue",
             sidebar_icon="mdi:server",
@@ -26,4 +28,4 @@ def async_register_frontend(hass: HomeAssistant) -> None:
 
 
 def async_remove_frontend(hass: HomeAssistant) -> None:
-    hass.components.frontend.async_remove_panel(FRONTEND_URL_PUBLIC)
+    async_remove_panel(hass, FRONTEND_URL_PUBLIC)

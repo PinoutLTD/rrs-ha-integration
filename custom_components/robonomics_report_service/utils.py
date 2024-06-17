@@ -5,6 +5,7 @@ import os
 import random
 import shutil
 import tempfile
+import urllib
 import typing as tp
 
 from homeassistant.components.persistent_notification import DOMAIN as NOTIFY_DOMAIN
@@ -14,7 +15,7 @@ from homeassistant.helpers.storage import Store
 from robonomicsinterface import Account
 from substrateinterface import Keypair, KeypairType
 
-from .const import DOMAIN, LOGS_MAX_LEN, SERVICE_STATUS
+from .const import DOMAIN, LOGS_MAX_LEN, SERVICE_STATUS, CONF_CONTROLLER_SEED, CONF_OWNER_ADDRESS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -228,3 +229,21 @@ def delete_temp_dir(dirpath: str) -> None:
     :param dirpath: the path to the directory
     """
     shutil.rmtree(dirpath)
+
+def create_link_for_notification(error_text: str) -> str:
+    encoded_description = urllib.parse.quote(error_text)
+    link = f"/report-service?description={encoded_description}"
+    return link
+
+async def get_robonomics_accounts_if_exists(hass: HomeAssistant) -> tp.Optional[tp.Dict]:
+    integrations_data = await Store(
+        hass,
+        VERSION_STORAGE,
+        "core.config_entries",
+        encoder=JSONEncoder,
+        atomic_writes=True,
+    ).async_load() or {}
+    for entry in integrations_data["data"]["entries"]:
+        if entry["domain"] == "robonomics":
+            return {CONF_CONTROLLER_SEED: entry['data']['admin_seed_secret'], CONF_OWNER_ADDRESS: entry['data']['sub_owner_address']}
+    

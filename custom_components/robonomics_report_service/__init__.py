@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import urllib.parse
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
@@ -22,6 +21,9 @@ from .const import (
     CONF_PINATA_SECRET,
     ROBONOMICS,
     RWS_CHECK_UNSUB,
+    CHECK_ENTITIES_TRACK_TIME_UNSUB,
+    HANDLE_CHECK_ENTITIES_TIME_CHANGE,
+    CHECK_ENTITIES_TIMEOUT,
 )
 from .frontend import async_register_frontend, async_remove_frontend
 from .robonomics import Robonomics
@@ -31,33 +33,17 @@ from .utils import (
     async_remove_store,
     ReportServiceStatus,
     set_service_status,
+    create_link_for_notification,
 )
 from .service import send_problem_report
 from .libp2p import get_pinata_creds
 from .websocket import async_register_websocket_commands
 from .ipfs import pinata_creds_exists
+from .entities_check import EntitiesStatusChecker
+from .logger_handler import LoggerHandler
+from .message_formatter import MessageFormatter
 
 _LOGGER = logging.getLogger(__name__)
-
-
-class LoggerHandler(logging.Handler):
-    def set_hass(self, hass: HomeAssistant):
-        self.hass = hass
-
-    def emit(self, record):
-        if record.name != "custom_components.report_service_robonomics":
-            if record.levelname == "ERROR" or record.levelname == "CRITICAL":
-                _LOGGER.info(record.msg)
-                error_msg = f"{record.name}: {record.msg}"
-                encoded_description = urllib.parse.quote(error_msg)
-                link = f"/report-service?description={encoded_description}"
-                service_data = {
-                    "message": f"Found an error: {record.msg} from {record.name}. [Click]({link})",
-                    "title": "Send Report Service",
-                }
-                self.hass.async_create_task(
-                    create_notification(self.hass, service_data)
-                )
 
 
 async def wait_for_pinata_creds(hass: HomeAssistant, entry: ConfigEntry):
@@ -84,12 +70,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data[CONF_OWNER_ADDRESS],
         entry.data.get(CONF_OWNER_SEED),
     )
-    root_logger = logging.getLogger()
-    root_logger_handler = LoggerHandler()
-    root_logger_handler.set_hass(hass)
-    root_logger.addHandler(root_logger_handler)
-    hass.data[DOMAIN][ROOT_LOGGER] = root_logger
-    hass.data[DOMAIN][LOGGER_HANDLER] = root_logger_handler
+    LoggerHandler().setup(hass)
     async_register_websocket_commands(hass)
     async_register_frontend(hass)
 
@@ -121,6 +102,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         check_rws_active,
         timedelta(days=1),
     )
+    async def check_states(_ = None):
+        await asyncio.sleep(15)
+        entities_checker = EntitiesStatusChecker(hass)
+        unavailables = entities_checker.get_unavailables()
+        not_updated = await entities_checker.get_not_updated()
+        unavailables_text = MessageFormatter.format_devices_list(unavailables, "Found some unavailable devices:")
+        not_updated_text = MessageFormatter.format_devices_list(not_updated, "Found some not updated for a long time devices:")
+        problem_text = MessageFormatter.concatinate_messages(unavailables_text, not_updated_text)
+        link = create_link_for_notification(problem_text)
+        service_data = {
+            "message": f"Found some unavaileble or not updated for a long time devices. [Click]({link})",
+            "title": "Send Report Service",
+        }
+        await create_notification(hass, service_data)
+    hass.data[DOMAIN][HANDLE_CHECK_ENTITIES_TIME_CHANGE] = check_states
+    asyncio.ensure_future(check_states())
+    hass.data[DOMAIN][CHECK_ENTITIES_TRACK_TIME_UNSUB] = async_track_time_interval(
+        hass,
+        hass.data[DOMAIN][HANDLE_CHECK_ENTITIES_TIME_CHANGE],
+        timedelta(seconds=CHECK_ENTITIES_TIMEOUT),
+    )
 
     return True
 
@@ -139,6 +141,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     :return: True if all unload event were success
     """
     hass.data[DOMAIN][ROOT_LOGGER].removeHandler(hass.data[DOMAIN][LOGGER_HANDLER])
+    hass.data[DOMAIN][CHECK_ENTITIES_TRACK_TIME_UNSUB]()
     async_remove_frontend(hass)
     hass.data[DOMAIN][RWS_CHECK_UNSUB]()
     return True

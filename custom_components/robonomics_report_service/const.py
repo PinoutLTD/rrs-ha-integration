@@ -31,7 +31,7 @@ LIBP2P_UNSUB = "libp2p"
 LIBP2P_WS_SERVER = "ws://127.0.0.1:8888"
 LIBP2P_LISTEN_PROTOCOL = "/pinataCreds"
 LIBP2P_SEND_PROTOCOL = "/initialization"
-INTEGRATOR_PEER_ID = "QmNfeYKDyXZ34TEocB2T4KE1MCK4vhjrdjPz7MJUdAnJ1r"
+INTEGRATOR_PEER_ID = "12D3KooWBE2XrMkf1Z6P3AtKqYmvdD59aoD5xwKySrCgkmBqJNFh"
 PROBLEM_SERVICE_ROBONOMICS_ADDRESS = "4HifM6Cny7bHAdLb5jw3hHV2KabuzRZV8gmHG1eh4PxJakwi"
 
 FRONTEND_URL_PUBLIC = "report-service"
@@ -40,3 +40,6 @@ ROBONOMICS = "robonomics"
 SERVICE_STATUS = "service_status"
 
 RWS_CHECK_UNSUB = "rws_check_unsub"
+CHECK_ENTITIES_TRACK_TIME_UNSUB = "check_entities_track_time_unsub"
+HANDLE_CHECK_ENTITIES_TIME_CHANGE = "handle_check_entities_time_change"
+CHECK_ENTITIES_TIMEOUT = 60 * 60 # Seconds
