@@ -41,7 +41,7 @@ from .websocket import async_register_websocket_commands
 from .ipfs import pinata_creds_exists
 from .entities_check import EntitiesStatusChecker
 from .logger_handler import LoggerHandler
-from .message_formatter import MessageFormatter
+from .error_sources.sources.utils.message_formatter import MessageFormatter
 
 _LOGGER = logging.getLogger(__name__)
 

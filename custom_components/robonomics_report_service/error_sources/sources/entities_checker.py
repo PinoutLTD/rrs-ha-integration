@@ -6,21 +6,47 @@ from homeassistant.helpers.entity_registry import async_get as async_get_entity_
 from homeassistant.helpers.device_registry import async_get as async_get_devices_registry
 from homeassistant.helpers.entity_registry import RegistryEntry
 from homeassistant.helpers.device_registry import DeviceEntry
-from homeassistant.core import HomeAssistant, State
+from homeassistant.core import HomeAssistant, State, callback
 from homeassistant.components.recorder import get_instance, history
 import homeassistant.util.dt as dt_util
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.helpers.event import async_track_time_interval
 
+from .error_source import ErrorSource
+from .utils.message_formatter import MessageFormatter
+from ...const import CHECK_ENTITIES_TIMEOUT
 
 _LOGGER = logging.getLogger(__name__)
 
-class EntitiesStatusChecker:
+
+class EntitiesStatusChecker(ErrorSource):
     def __init__(self, hass: HomeAssistant) -> None:
-        self.hass = hass
+        super().__init__(hass)
         self.entity_registry = async_get_entity_registry(hass)
         self.devices_registry = async_get_devices_registry(hass)
+        self.unsub_timer = None
 
-    def get_unavailables(self) -> tp.Dict:
+    @callback
+    def setup(self) -> None:
+        self.unsub_timer = async_track_time_interval(
+            self.hass,
+            self._check_entities,
+            timedelta(hours=CHECK_ENTITIES_TIMEOUT),
+        )
+
+    @callback
+    def remove(self) -> None:
+        self.unsub_timer()
+
+    async def _check_entities(self, _ = None):
+        unavailables = self._get_unavailables()
+        not_updated = await self._get_not_updated()
+        unavailables_text = MessageFormatter.format_devices_list(unavailables, "Found some unavailable devices:")
+        not_updated_text = MessageFormatter.format_devices_list(not_updated, "Found some not updated for a long time devices:")
+        problem_text = MessageFormatter.concatinate_messages(unavailables_text, not_updated_text)
+        await self._run_report_service(problem_text)
+
+    def _get_unavailables(self) -> tp.Dict:
         unavailables = []
         for entity in self.entity_registry.entities:
             entity_data = self.entity_registry.async_get(entity)
@@ -28,7 +54,7 @@ class EntitiesStatusChecker:
                 unavailables.append(entity_data.entity_id)
         return self._get_dict_with_devices(unavailables)
 
-    async def get_not_updated(self) -> tp.Dict:
+    async def _get_not_updated(self) -> tp.Dict:
         not_updated = []
         for entity in self.entity_registry.entities:
             entity_data = self.entity_registry.async_get(entity)
@@ -97,16 +123,6 @@ class EntitiesStatusChecker:
         end: datetime,
         entity_id: str,
     ) -> list[State]:
-        """Save states of the given entity within 24hrs.
-
-        :param hass: HomeAssistant instance
-        :param start: Begin of the period
-        :param end: End of the period
-        :param entity_id: Id for entity from HomeAssistant
-
-        :return: List of State within 24hrs
-        """
-
         return history.state_changes_during_period(
             self.hass,
             start,

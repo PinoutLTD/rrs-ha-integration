@@ -236,14 +236,16 @@ def create_link_for_notification(error_text: str) -> str:
     return link
 
 async def get_robonomics_accounts_if_exists(hass: HomeAssistant) -> tp.Optional[tp.Dict]:
-    integrations_data = await Store(
+    store = Store(
         hass,
-        VERSION_STORAGE,
+        1,
         "core.config_entries",
         encoder=JSONEncoder,
         atomic_writes=True,
-    ).async_load() or {}
-    for entry in integrations_data["data"]["entries"]:
-        if entry["domain"] == "robonomics":
-            return {CONF_CONTROLLER_SEED: entry['data']['admin_seed_secret'], CONF_OWNER_ADDRESS: entry['data']['sub_owner_address']}
+    )
+    integrations_data = await store.async_load()
+    if integrations_data is not None:
+        for entry in integrations_data["entries"]:
+            if entry["domain"] == "robonomics":
+                return {CONF_CONTROLLER_SEED: entry['data']['admin_seed_secret'], CONF_OWNER_ADDRESS: entry['data']['sub_owner_address']}
     

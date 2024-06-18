@@ -12,19 +12,22 @@ from .const import (
     STORAGE_ACCOUNT_SEED,
     CONF_OWNER_ADDRESS,
     CONF_CONTROLLER_SEED,
+    CONF_SENDER_SEED,
+    CONF_PHONE_NUMBER,
 )
 from .utils import (
     async_load_from_store,
     async_save_to_store,
     get_robonomics_accounts_if_exists,
 )
-from .robonomics import create_account, get_address_for_seed
+from .robonomics import Robonomics
 
 _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_EMAIL): str,
+        vol.Optional(CONF_PHONE_NUMBER): str,
     }
 )
 
@@ -35,7 +38,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self):
-        self.paid = False
+        self.seed_saved = False
 
     async def async_step_user(self, user_input: tp.Optional[dict] = None) -> FlowResult:
         """Handle the initial step of the configuration. Contains user's warnings.
@@ -50,37 +53,20 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="user", data_schema=STEP_USER_DATA_SCHEMA
             )
         self.user_data = user_input
-        await self._get_or_create_accounts()
-        return self.async_create_entry(
-            title="Robonomics Report Service", data=self.user_data
-        )
+        sender_seed, _ = Robonomics.generate_seed()
+        self.user_data[CONF_SENDER_SEED] = sender_seed
+        return await self.async_step_seed()
 
-    async def _get_or_create_accounts(self):
-        storage_data = await async_load_from_store(self.hass, STORAGE_ACCOUNT_SEED)
-        # If Robonomics integration was configured, there will be controller seed and owner address in the storage
-        if (
-            CONF_CONTROLLER_SEED in storage_data
-            and CONF_OWNER_ADDRESS in storage_data
-        ):
-            controller_seed = storage_data[CONF_CONTROLLER_SEED]
-            owner_address = storage_data[CONF_OWNER_ADDRESS]
-            owner_seed = storage_data.get(CONF_OWNER_SEED)
+    async def async_step_seed(self, user_input: dict[str, tp.Any] | None = None):
+        if not self.seed_saved:
+            self.seed_saved = True
+            return self.async_show_form(
+                step_id="seed",
+                data_schema=vol.Schema({}),
+                description_placeholders={"seed": self.user_data[CONF_SENDER_SEED]},
+            )
         else:
-            robonomics_data = await get_robonomics_accounts_if_exists(self.hass)
-            if robonomics_data is not None:
-                controller_seed = robonomics_data[CONF_CONTROLLER_SEED]
-                owner_address = robonomics_data[CONF_OWNER_ADDRESS]
-                owner_seed = None
-            else:
-                controller_seed, _ = create_account()
-                owner_seed, owner_account = create_account()
-                owner_address = owner_account.get_address()
-            storage_data[CONF_CONTROLLER_SEED] = controller_seed
-            storage_data[CONF_OWNER_ADDRESS] = owner_address
-            storage_data[CONF_OWNER_SEED] = owner_seed
-            await async_save_to_store(self.hass, STORAGE_ACCOUNT_SEED, storage_data)
-        self.user_data[CONF_CONTROLLER_SEED] = controller_seed
-        self.user_data[CONF_OWNER_ADDRESS] = owner_address
-        self.user_data[CONF_OWNER_SEED] = owner_seed
-        _LOGGER.debug(f"Finished configuration. Owner address: {owner_address}, controller_address: {get_address_for_seed(controller_seed)}")
+            return self.async_create_entry(
+                title="Robonomics Report Service", data=self.user_data
+            )
 

@@ -10,6 +10,8 @@ CONF_CONTROLLER_SEED = "controller_seed"
 CONF_OWNER_ADDRESS = "owner_address"
 CONF_PINATA_SECRET = "pinata_secret"
 CONF_PINATA_PUBLIC = "pinata_public"
+CONF_SENDER_SEED = "sender_seed"
+CONF_PHONE_NUMBER = "phone_number"
 
 ROBONOMICS_WSS = [
     "wss://kusama.rpc.robonomics.network/",
@@ -42,4 +44,6 @@ SERVICE_STATUS = "service_status"
 RWS_CHECK_UNSUB = "rws_check_unsub"
 CHECK_ENTITIES_TRACK_TIME_UNSUB = "check_entities_track_time_unsub"
 HANDLE_CHECK_ENTITIES_TIME_CHANGE = "handle_check_entities_time_change"
-CHECK_ENTITIES_TIMEOUT = 60 * 60 # Seconds
+CHECK_ENTITIES_TIMEOUT = 24 # Hours
+
+OWNER_ADDRESS = ""

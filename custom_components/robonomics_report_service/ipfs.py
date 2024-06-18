@@ -4,7 +4,7 @@ import typing as tp
 from homeassistant.core import HomeAssistant
 from pinatapy import PinataPy
 
-from .utils import to_thread, async_load_from_store
+from .utils import async_load_from_store
 from .const import STORAGE_PINATA_CREDS, CONF_PINATA_PUBLIC, CONF_PINATA_SECRET
 
 _LOGGER = logging.getLogger(__name__)
@@ -23,11 +23,10 @@ async def pin_to_pinata(
 
     _LOGGER.debug(f"Start adding {dirname} to Pinata.")
     pinata = PinataPy(pinata_public, pinata_secret)
-    ipfs_hash = await _pin_to_pinata(pinata, dirname)
+    ipfs_hash = await hass.async_add_executor_job(_pin_to_pinata, pinata, dirname)
     return ipfs_hash
 
 
-@to_thread
 def _pin_to_pinata(pinata: PinataPy, dirname: str) -> tp.Optional[str]:
     try:
         res = None
