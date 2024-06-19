@@ -1,6 +1,7 @@
 import typing as tp
 from datetime import timedelta, datetime
 import logging
+import asyncio
 
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 from homeassistant.helpers.device_registry import async_get as async_get_devices_registry
@@ -33,12 +34,14 @@ class EntitiesStatusChecker(ErrorSource):
             self._check_entities,
             timedelta(hours=CHECK_ENTITIES_TIMEOUT),
         )
+        asyncio.ensure_future(self._check_entities())
 
     @callback
     def remove(self) -> None:
         self.unsub_timer()
 
     async def _check_entities(self, _ = None):
+        await asyncio.sleep(15)
         unavailables = self._get_unavailables()
         not_updated = await self._get_not_updated()
         unavailables_text = MessageFormatter.format_devices_list(unavailables, "Found some unavailable devices:")

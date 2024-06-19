@@ -1,12 +1,13 @@
 import asyncio
 import logging
 import time
+import typing as tp
 
 from homeassistant.core import HomeAssistant
 from robonomicsinterface import (
     RWS,
     Account,
-    Launch,
+    Datalog,
     Subscriber,
     SubEvent,
 )
@@ -49,33 +50,42 @@ class Robonomics:
             )
             while self.subscriber is not None:
                 await asyncio.sleep(1)
+    
+    async def send_datalog(self, ipfs_hash: str) -> None:
+        await self.hass.async_add_executor_job(self._send_datalog, ipfs_hash)
 
-    def send_launch(self, address: str, ipfs_hash: str) -> None:
-        for attempt in Retrying(
-            wait=wait_fixed(2), stop=stop_after_attempt(len(ROBONOMICS_WSS))
-        ):
-            with attempt:
-                try:
-                    _LOGGER.debug(f"Start creating launch with ipfs hash: {ipfs_hash}")
-                    launch = Launch(
-                        self.sender_account, rws_sub_owner=OWNER_ADDRESS
-                    )
-                    receipt = launch.launch(address, ipfs_hash)
-                except TimeoutError:
-                    self._change_current_wss()
-                    raise TimeoutError
-                except SubstrateRequestException as e:
-                    if e.args[0]["code"] == 1014:
-                        _LOGGER.warning(f"Launch sending exception: {e}, retrying...")
-                        time.sleep(8)
-                        raise e
-                    else:
-                        _LOGGER.warning(f"Launch sending exception: {e}")
+    def _retry_decorator(func: tp.Callable):
+        def wrapper(self, *args, **kwargs):
+            for attempt in Retrying(
+                wait=wait_fixed(2), stop=stop_after_attempt(len(ROBONOMICS_WSS))
+            ):
+                with attempt:
+                    try:
+                        res = func(self, *args, **kwargs)
+                    except TimeoutError:
+                        self._change_current_wss()
+                        raise TimeoutError
+                    except SubstrateRequestException as e:
+                        if e.args[0]["code"] == 1014:
+                            _LOGGER.warning(f"Datalog sending exception: {e}, retrying...")
+                            time.sleep(8)
+                            raise e
+                        else:
+                            _LOGGER.warning(f"Datalog sending exception: {e}")
+                            return None
+                    except Exception as e:
+                        _LOGGER.warning(f"Datalog sending exeption: {e}")
                         return None
-                except Exception as e:
-                    _LOGGER.warning(f"Launch sending exeption: {e}")
-                    return None
-        _LOGGER.debug(f"Launch created with hash: {receipt}")
+        return wrapper
+
+    @_retry_decorator
+    def _send_datalog(self, ipfs_hash: str) -> None:
+        _LOGGER.debug(f"Start creating datalog with ipfs hash: {ipfs_hash}")
+        datalog = Datalog(
+            self.sender_account, rws_sub_owner=OWNER_ADDRESS
+        )
+        receipt = datalog.record(ipfs_hash)
+        _LOGGER.debug(f"Datalog created with hash: {receipt}")
 
     def _check_sender_in_rws(self) -> bool:
         rws = RWS(self.sender_account)

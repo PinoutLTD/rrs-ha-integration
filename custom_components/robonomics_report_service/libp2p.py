@@ -1,13 +1,11 @@
-import websockets
 import logging
-import json
+import typing as tp
+import asyncio
 
 from homeassistant.core import HomeAssistant
-from robonomicsinterface import Account
-from substrateinterface import KeypairType
+from pyproxy import Libp2pProxyAPI
 
 from .const import (
-    DOMAIN,
     LIBP2P_WS_SERVER,
     LIBP2P_LISTEN_PROTOCOL,
     LIBP2P_SEND_PROTOCOL,
@@ -16,99 +14,81 @@ from .const import (
     PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
     CONF_PINATA_PUBLIC,
     CONF_PINATA_SECRET,
-    SERVICE_STATUS,
 )
 from .utils import (
     async_save_to_store,
     decrypt_message,
     encrypt_message,
-    ReportServiceStatus,
-    set_service_status,
+    get_address_for_seed,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def get_pinata_creds(
-    hass: HomeAssistant, controller_seed: str, email: str, owner_address: str
-) -> bool:
-    _LOGGER.debug("Start requesting Pinata credentials")
-    set_service_status(hass, ReportServiceStatus.WaitPinataCreds)
-    try:
-        controller_address = Account(
-            seed=controller_seed, crypto_type=KeypairType.ED25519
-        ).get_address()
-        async with websockets.connect(LIBP2P_WS_SERVER, ping_timeout=None) as websocket:
-            _LOGGER.debug(f"Connected to WebSocket server at {LIBP2P_WS_SERVER}")
-            await _subscribe_to_protocol(websocket, controller_address)
-            encrypted_email = encrypt_message(
-                email,
-                sender_seed=controller_seed,
-                recipient_address=PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
+class LibP2P:
+    def __init__(self, hass: HomeAssistant, sender_seed: str, email: str):
+        self.hass = hass
+        self.libp2p_proxy = Libp2pProxyAPI(LIBP2P_WS_SERVER)
+        self.sender_seed = sender_seed
+        self.sender_address = get_address_for_seed(self.sender_seed)
+        self.email = email
+        self._pinata_creds_saved = False
+        self._listen_protocol = f"{LIBP2P_LISTEN_PROTOCOL}/{self.sender_address}"
+
+    async def get_and_save_pinata_creds(self) -> bool:
+        self._pinata_creds_saved = False
+        self.libp2p_proxy.subscribe_to_protocol_async(
+            self._listen_protocol, self._save_pinata_creds
+        )
+        await self._send_init_request()
+        while not self._pinata_creds_saved:
+            await asyncio.sleep(1)
+        await self.libp2p_proxy.unsubscribe_from_all_protocols()
+        return True
+
+    async def _save_pinata_creds(self, received_data: tp.Union[str, dict]):
+        if "public" in received_data and "private" in received_data:
+            storage_data = {}
+            storage_data[CONF_PINATA_PUBLIC] = self._decrypt_message(
+                received_data["public"]
             )
-            await _send_init_request(
-                websocket, encrypted_email, controller_address, owner_address
+            storage_data[CONF_PINATA_SECRET] = self._decrypt_message(
+                received_data["private"]
             )
-            while True:
-                response = await websocket.recv()
-                _LOGGER.debug(f"Received message from server: {response}")
-                try:
-                    json_resp = json.loads(response)
-                except:
-                    _LOGGER.debug(f"Got message is not json: {response}")
-                    continue
-                if "public" in json_resp and "private" in json_resp:
-                    storage_data = {}
-                    storage_data[CONF_PINATA_PUBLIC] = decrypt_message(
-                        json_resp["public"],
-                        sender_address=PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
-                        recipient_seed=controller_seed,
-                    ).decode()
-                    storage_data[CONF_PINATA_SECRET] = decrypt_message(
-                        json_resp["private"],
-                        sender_address=PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
-                        recipient_seed=controller_seed,
-                    ).decode()
-                    await async_save_to_store(
-                        hass,
-                        STORAGE_PINATA_CREDS,
-                        storage_data,
-                    )
-                    return True
-    except websockets.exceptions.ConnectionClosedOK:
-        _LOGGER.debug(f"Websockets connection closed")
-        return False
-    except Exception as e:
-        _LOGGER.error(f"Websocket exception: {e}")
-        return False
+            await async_save_to_store(
+                self.hass,
+                STORAGE_PINATA_CREDS,
+                storage_data,
+            )
+            self._pinata_creds_saved = True
+            _LOGGER.debug("Got and saved pinata creds")
+        else:
+            _LOGGER.error(f"Libp2p message in wrong format: {received_data}")
 
+    def _decrypt_message(self, encrypted_data: str) -> str:
+        return decrypt_message(
+            encrypted_data,
+            sender_address=PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
+            recipient_seed=self.sender_seed,
+        ).decode()
 
-async def _subscribe_to_protocol(websocket, controller_address):
-    msg_to_ws = json.dumps(
-        {"protocols_to_listen": [f"{LIBP2P_LISTEN_PROTOCOL}/{controller_address}"]}
-    )
-    await _send_to_websocket(websocket, msg_to_ws)
+    async def _send_init_request(self) -> None:
+        data = self._format_data_for_init_request()
+        self.libp2p_proxy.send_msg_to_libp2p(
+            data, LIBP2P_SEND_PROTOCOL, server_peer_id=INTEGRATOR_PEER_ID
+        )
 
-
-async def _send_init_request(
-    websocket, email: str, controller_address: str, owner_address: str
-):
-    data = {
-        "email": email,
-        "controller_address": controller_address,
-        "owner_address": owner_address,
-    }
-    msg_to_ws = json.dumps(
-        {
-            "protocol": LIBP2P_SEND_PROTOCOL,
-            "serverPeerId": INTEGRATOR_PEER_ID,
-            "save_data": False,
-            "data": data,
+    def _format_data_for_init_request(self) -> dict:
+        encrypted_email = self._encrypt_message(self.email)
+        data = {
+            "email": encrypted_email,
+            "sender_address": self.sender_address,
         }
-    )
-    await _send_to_websocket(websocket, msg_to_ws)
+        return data
 
-
-async def _send_to_websocket(websocket, msg: str):
-    await websocket.send(msg)
-    _LOGGER.debug(f"Sent to websocket: {msg}")
+    def _encrypt_message(self, data: str) -> str:
+        return encrypt_message(
+            data,
+            sender_seed=self.sender_seed,
+            recipient_address=PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
+        )

@@ -8,17 +8,8 @@ from homeassistant.data_entry_flow import FlowResult
 from .const import (
     DOMAIN,
     CONF_EMAIL,
-    CONF_OWNER_SEED,
-    STORAGE_ACCOUNT_SEED,
-    CONF_OWNER_ADDRESS,
-    CONF_CONTROLLER_SEED,
     CONF_SENDER_SEED,
     CONF_PHONE_NUMBER,
-)
-from .utils import (
-    async_load_from_store,
-    async_save_to_store,
-    get_robonomics_accounts_if_exists,
 )
 from .robonomics import Robonomics
 
@@ -53,7 +44,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="user", data_schema=STEP_USER_DATA_SCHEMA
             )
         self.user_data = user_input
-        sender_seed, _ = Robonomics.generate_seed()
+        sender_seed = Robonomics.generate_seed()
         self.user_data[CONF_SENDER_SEED] = sender_seed
         return await self.async_step_seed()
 

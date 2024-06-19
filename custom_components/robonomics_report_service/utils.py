@@ -1,48 +1,58 @@
-import asyncio
-import functools
 import logging
 import os
 import random
 import shutil
 import tempfile
-import urllib
 import typing as tp
+import json
 
-from homeassistant.components.persistent_notification import DOMAIN as NOTIFY_DOMAIN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.json import JSONEncoder
 from homeassistant.helpers.storage import Store
 from robonomicsinterface import Account
 from substrateinterface import Keypair, KeypairType
 
-from .const import DOMAIN, LOGS_MAX_LEN, SERVICE_STATUS, CONF_CONTROLLER_SEED, CONF_OWNER_ADDRESS
+from .const import LOGS_MAX_LEN, STORAGE_PINATA_CREDS, CONF_PINATA_PUBLIC, CONF_PINATA_SECRET
 
 _LOGGER = logging.getLogger(__name__)
 
 VERSION_STORAGE = 6
-SERVICE_PERSISTENT_NOTIFICATION = "create"
 
-class ReportServiceStatus:
-    WaitPinataCreds: str = "Waiting for payment"
-    WaitTokens: str = "Service got the payment, waiting for tokens"
-    BuyingRWS: str = "Service got tokens, buying the subscription"
-    Work: str = "Service is working"
+def encrypt_message(message, sender_seed: str, recipient_address: str) -> str:
+    try:
+        random_seed = Keypair.generate_mnemonic()
+        random_acc = Account(random_seed, crypto_type=KeypairType.ED25519)
+        sender_acc = Account(sender_seed, crypto_type=KeypairType.ED25519)
+        sender_keypair = sender_acc.keypair
+        encrypted_data = _encrypt_message(
+            str(message), sender_keypair, random_acc.keypair.public_key
+        )
+        devices = [recipient_address, sender_acc.get_address()]
+        encrypted_keys = {}
+        # _LOGGER.debug(f"Encrypt states for following devices: {devices}")
+        for device in devices:
+            try:
+                receiver_kp = Keypair(
+                    ss58_address=device, crypto_type=KeypairType.ED25519
+                )
+                encrypted_key = _encrypt_message(
+                    random_seed, sender_keypair, receiver_kp.public_key
+                )
+                encrypted_keys[device] = encrypted_key
+            except Exception as e:
+                _LOGGER.warning(
+                    f"Faild to encrypt key for: {device} with error: {e}. Check your RWS devices, you may have SR25519 address in devices."
+                )
+        encrypted_keys["data"] = encrypted_data
+        data_final = json.dumps(encrypted_keys)
+        return data_final
+    except Exception as e:
+        _LOGGER.error(f"Exception in encrypt for devices: {e}")
 
-    @classmethod
-    def status_valid(cls, status: str) -> bool:
-        return (status == cls.WaitTokens) or (status == cls.WaitPinataCreds) or (status == cls.BuyingRWS) or (status == cls.Work) 
-
-def set_service_status(hass: HomeAssistant, status: str):
-    if ReportServiceStatus.status_valid(status):
-        _LOGGER.debug(f"Status changed from {hass.data[DOMAIN].get(SERVICE_STATUS)} to {status}")
-        hass.data[DOMAIN][SERVICE_STATUS] = status
-
-def encrypt_message(
+def _encrypt_message(
     message: tp.Union[bytes, str],
-    sender_keypair: Keypair = None,
-    recipient_public_key: bytes = None,
-    sender_seed: str = None,
-    recipient_address: str = None,
+    sender_keypair: Keypair,
+    recipient_public_key: bytes,
 ) -> str:
     """Encrypt message with sender private key and recipient public key
 
@@ -52,12 +62,6 @@ def encrypt_message(
 
     :return: encrypted message
     """
-    if sender_keypair is None:
-        sender_keypair = Account(sender_seed, crypto_type=KeypairType.ED25519).keypair
-    if recipient_public_key is None:
-        recipient_public_key = Keypair(
-            ss58_address=recipient_address, crypto_type=KeypairType.ED25519
-        ).public_key
     encrypted = sender_keypair.encrypt_message(message, recipient_public_key)
     return f"0x{encrypted.hex()}"
 
@@ -91,29 +95,15 @@ def decrypt_message(
 
     return recipient_keypair.decrypt_message(bytes_encrypted, sender_public_key)
 
+def get_address_for_seed(seed: str) -> str:
+    acc = Account(seed, crypto_type=KeypairType.ED25519)
+    return acc.get_address()
 
-async def create_notification(
-    hass: HomeAssistant, service_data: tp.Dict[str, str]
-) -> None:
-    """Create HomeAssistant notification.
-
-    :param hass: HomeAssistant instance
-    :param service_data: Message for notification
-    """
-    service_data["notification_id"] = DOMAIN
-    await hass.services.async_call(
-        domain=NOTIFY_DOMAIN,
-        service=SERVICE_PERSISTENT_NOTIFICATION,
-        service_data=service_data,
-    )
-
-
-def to_thread(func: tp.Callable) -> tp.Coroutine:
-    @functools.wraps(func)
-    async def wrapper(*args, **kwargs):
-        return await asyncio.to_thread(func, *args, **kwargs)
-
-    return wrapper
+async def pinata_creds_exists(hass: HomeAssistant) -> bool:
+    storage_data = await async_load_from_store(hass, STORAGE_PINATA_CREDS)
+    res = CONF_PINATA_PUBLIC in storage_data and CONF_PINATA_SECRET in storage_data
+    _LOGGER.debug(f"Pinata creds exists: {res}")
+    return res
 
 
 def _get_store_key(key):
@@ -135,11 +125,6 @@ def _get_store_for_key(hass, key):
 async def async_load_from_store(hass, key):
     """Load the retained data from store and return de-serialized data."""
     return await _get_store_for_key(hass, key).async_load() or {}
-
-
-async def async_remove_store(hass: HomeAssistant, key: str):
-    """Remove data from store for given key"""
-    await _get_store_for_key(hass, key).async_remove()
 
 
 async def async_save_to_store(hass, key, data):
@@ -166,12 +151,7 @@ def create_encrypted_picture(
     sender_seed: tp.Optional[str] = None,
     receiver_address: tp.Optional[str] = None,
 ) -> str:
-    sender_acc = Account(seed=sender_seed, crypto_type=KeypairType.ED25519)
-    sender_kp = sender_acc.keypair
-    receiver_kp = Keypair(
-        ss58_address=receiver_address, crypto_type=KeypairType.ED25519
-    )
-    encrypted_data = encrypt_message(data, sender_kp, receiver_kp.public_key)
+    encrypted_data = encrypt_message(data, sender_seed, receiver_address)
     picture_path = f"{dirname}/picture{number_of_picture}"
     with open(picture_path, "w") as f:
         f.write(encrypted_data)
@@ -179,11 +159,11 @@ def create_encrypted_picture(
     return picture_path
 
 
-def create_temp_dir_and_copy_files(
+def create_temp_dir_with_encrypted_files(
     dirname: str,
     files: tp.List[str],
-    sender_seed: tp.Optional[str] = None,
-    receiver_address: tp.Optional[str] = None,
+    sender_seed: tp.Optional[str],
+    receiver_address: tp.Optional[str],
 ) -> str:
     """
     Create directory in tepmoral directory and copy there files
@@ -205,13 +185,8 @@ def create_temp_dir_and_copy_files(
                 with open(filepath, "r") as f:
                     data = f.read()
                 data = data[-LOGS_MAX_LEN:]
-                sender_acc = Account(seed=sender_seed, crypto_type=KeypairType.ED25519)
-                sender_kp = sender_acc.keypair
-                receiver_kp = Keypair(
-                    ss58_address=receiver_address, crypto_type=KeypairType.ED25519
-                )
                 encrypted_data = encrypt_message(
-                    data, sender_kp, receiver_kp.public_key
+                    data, sender_seed, receiver_address
                 )
                 with open(f"{dirpath}/{filename}", "w") as f:
                     f.write(encrypted_data)
@@ -230,22 +205,4 @@ def delete_temp_dir(dirpath: str) -> None:
     """
     shutil.rmtree(dirpath)
 
-def create_link_for_notification(error_text: str) -> str:
-    encoded_description = urllib.parse.quote(error_text)
-    link = f"/report-service?description={encoded_description}"
-    return link
-
-async def get_robonomics_accounts_if_exists(hass: HomeAssistant) -> tp.Optional[tp.Dict]:
-    store = Store(
-        hass,
-        1,
-        "core.config_entries",
-        encoder=JSONEncoder,
-        atomic_writes=True,
-    )
-    integrations_data = await store.async_load()
-    if integrations_data is not None:
-        for entry in integrations_data["entries"]:
-            if entry["domain"] == "robonomics":
-                return {CONF_CONTROLLER_SEED: entry['data']['admin_seed_secret'], CONF_OWNER_ADDRESS: entry['data']['sub_owner_address']}
     
