@@ -62,6 +62,7 @@ class Robonomics:
                 with attempt:
                     try:
                         res = func(self, *args, **kwargs)
+                        return res
                     except TimeoutError:
                         self._change_current_wss()
                         raise TimeoutError
