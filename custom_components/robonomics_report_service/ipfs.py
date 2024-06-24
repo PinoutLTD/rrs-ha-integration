@@ -29,6 +29,9 @@ class IPFS:
             res = None
             res = pinata.pin_file_to_ipfs(dirname, save_absolute_paths=False)
             ipfs_hash: tp.Optional[str] = res.get("IpfsHash")
+            if ipfs_hash is None:
+                _LOGGER.error(f"Can't pin to pinata with responce response: {res}")
+                return None
             _LOGGER.debug(f"Directory {dirname} was added to Pinata with cid: {ipfs_hash}")
             return ipfs_hash
         except Exception as e:

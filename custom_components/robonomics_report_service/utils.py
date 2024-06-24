@@ -187,8 +187,12 @@ def create_temp_dir_with_encrypted_files(
         temp_dirname = tempfile.gettempdir()
         dirpath = f"{temp_dirname}/{dirname}"
         if os.path.exists(dirpath):
-            dirpath += str(random.randint(1, 100))
-        os.mkdir(dirpath)
+            dirpath += str(random.randint(1, 1000))
+        try:
+            os.mkdir(dirpath)
+        except Exception as e:
+            _LOGGER.debug(f"Can't create tempdir: {e}, retrying...")
+            return create_temp_dir_with_encrypted_files(dirname, files, sender_seed, receiver_address)
         for filepath in files:
             filename = filepath.split("/")[-1]
             if sender_seed and receiver_address:
@@ -215,4 +219,3 @@ def delete_temp_dir(dirpath: str) -> None:
     """
     shutil.rmtree(dirpath)
 
-    

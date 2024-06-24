@@ -27,7 +27,7 @@ class LoggerHandler(logging.Handler, ErrorSource):
         if DOMAIN not in record.name:
             if record.levelname == "ERROR" or record.levelname == "CRITICAL" or record.levelname == "WARNING":
                 _LOGGER.debug(f"New error message: {record.msg}")
-                error_msg = f"{record.name}: {record.msg}"
+                error_msg = f"{record.name} - {record.levelname}: {record.msg}"
                 asyncio.run_coroutine_threadsafe(
                     self._run_report_service(error_msg), self.hass.loop
                 )
