@@ -4,42 +4,36 @@ import typing as tp
 from homeassistant.core import HomeAssistant
 from pinatapy import PinataPy
 
-from .utils import to_thread, async_load_from_store
+from .utils import async_load_from_store
 from .const import STORAGE_PINATA_CREDS, CONF_PINATA_PUBLIC, CONF_PINATA_SECRET
 
 _LOGGER = logging.getLogger(__name__)
 
+class IPFS:
+    def __init__(self, hass: HomeAssistant):
+        self.hass = hass
 
-async def pin_to_pinata(
-    hass: HomeAssistant, dirname: str, pinata_public: str, pinata_secret: str
-) -> tp.Optional[str]:
-    """Add file to Pinata service
+    async def pin_to_pinata(self, dirname: str) -> tp.Optional[str]:
+        pinata = await self._get_pinata_with_creds()
+        if pinata is not None:
+            ipfs_hash = await self.hass.async_add_executor_job(self._pin_to_pinata, dirname, pinata)
+            return ipfs_hash
 
-    :param hass:  Home Assistant instance
-    :param dirname: path to the directory to pin
+    async def _get_pinata_with_creds(self) -> tp.Optional[PinataPy]:
+        storage_data = await async_load_from_store(self.hass, STORAGE_PINATA_CREDS)
+        if CONF_PINATA_PUBLIC in storage_data and CONF_PINATA_SECRET in storage_data:
+            return PinataPy(storage_data[CONF_PINATA_PUBLIC], storage_data[CONF_PINATA_SECRET])
 
-    :return: IPFS hash of the file
-    """
+    def _pin_to_pinata(self, dirname: str, pinata: PinataPy) -> tp.Optional[str]:
+        try:
+            res = None
+            res = pinata.pin_file_to_ipfs(dirname, save_absolute_paths=False)
+            ipfs_hash: tp.Optional[str] = res.get("IpfsHash")
+            if ipfs_hash is None:
+                _LOGGER.error(f"Can't pin to pinata with responce response: {res}")
+                return None
+            _LOGGER.debug(f"Directory {dirname} was added to Pinata with cid: {ipfs_hash}")
+            return ipfs_hash
+        except Exception as e:
+            _LOGGER.error(f"Exception in pinata pin: {e}, pinata response: {res}")
 
-    _LOGGER.debug(f"Start adding {dirname} to Pinata.")
-    pinata = PinataPy(pinata_public, pinata_secret)
-    ipfs_hash = await _pin_to_pinata(pinata, dirname)
-    return ipfs_hash
-
-
-@to_thread
-def _pin_to_pinata(pinata: PinataPy, dirname: str) -> tp.Optional[str]:
-    try:
-        res = None
-        res = pinata.pin_file_to_ipfs(dirname, save_absolute_paths=False)
-        ipfs_hash: tp.Optional[str] = res["IpfsHash"]
-        _LOGGER.debug(f"Directory {dirname} was added to Pinata with cid: {ipfs_hash}")
-        return ipfs_hash
-    except Exception as e:
-        _LOGGER.error(f"Exception in pinata pin: {e}, pinata response: {res}")
-
-async def pinata_creds_exists(hass: HomeAssistant) -> bool:
-    storage_data = await async_load_from_store(hass, STORAGE_PINATA_CREDS)
-    res = CONF_PINATA_PUBLIC in storage_data and CONF_PINATA_SECRET in storage_data
-    _LOGGER.debug(f"Pinata creds exists: {res}")
-    return res

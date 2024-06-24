@@ -6,11 +6,12 @@
                 "description": "Enter your e-mail address to pay for the subscription. if you have already paid for it, you can enter your account seed.",
                 "data": {
                     "email": "E-mail Address",
-                    "owner_seed": "Seed phrase of the subscription owner account"
+                    "phone_number": "Phone number (Optional)"
                 }
             },
-            "wait": {
-                "title": "Robonomics Report Service"
+            "seed": {
+                "title": "Robonomics Report Service",
+                "description": "Save your mnemonic seed safely\n \n```\n{seed}\n```\n"
             }
         },
         "progress": {
