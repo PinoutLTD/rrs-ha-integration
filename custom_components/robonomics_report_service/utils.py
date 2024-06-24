@@ -65,13 +65,31 @@ def _encrypt_message(
     encrypted = sender_keypair.encrypt_message(message, recipient_public_key)
     return f"0x{encrypted.hex()}"
 
+def decrypt_message(encrypted_message: str, receiver_seed: str, sender_address: str) -> str:
+    try:
+        data_json = json.loads(encrypted_message)
+        recipient_acc = Account(receiver_seed, crypto_type=KeypairType.ED25519)
+        sender_kp = Keypair(ss58_address=sender_address)
+        if recipient_acc.get_address() in data_json:
+            decrypted_seed = _decrypt_message(
+                data_json[recipient_acc.get_address()],
+                sender_kp.public_key,
+                recipient_acc.keypair,
+            ).decode("utf-8")
+            decrypted_acc = Account(decrypted_seed, crypto_type=KeypairType.ED25519)
+            decrypted_data = _decrypt_message(
+                data_json["data"], sender_kp.public_key, decrypted_acc.keypair
+            ).decode("utf-8")
+            return decrypted_data
+        else:
+            _LOGGER.error(f"Error in decrypt for devices: account is not in devices")
+    except Exception as e:
+        _LOGGER.error(f"Exception in decrypt for devices: {e}")
 
-def decrypt_message(
+def _decrypt_message(
     encrypted_message: str,
     sender_public_key: bytes = None,
     recipient_keypair: Keypair = None,
-    sender_address: str = None,
-    recipient_seed: str = None,
 ) -> bytes:
     """Decrypt message with recepient private key and sender puplic key
 
@@ -81,14 +99,6 @@ def decrypt_message(
 
     :return: Decrypted message
     """
-    if recipient_keypair is None:
-        recipient_keypair = Account(
-            recipient_seed, crypto_type=KeypairType.ED25519
-        ).keypair
-    if sender_public_key is None:
-        sender_public_key = Keypair(
-            ss58_address=sender_address, crypto_type=KeypairType.ED25519
-        ).public_key
     if encrypted_message[:2] == "0x":
         encrypted_message = encrypted_message[2:]
     bytes_encrypted = bytes.fromhex(encrypted_message)

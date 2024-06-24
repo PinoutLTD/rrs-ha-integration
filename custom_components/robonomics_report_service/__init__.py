@@ -8,6 +8,7 @@ from .const import (
     CONF_SENDER_SEED,
     DOMAIN,
     ERROR_SOURCES_MANAGER,
+    CONF_EMAIL
 )
 # from .frontend import async_register_frontend, async_remove_frontend
 from .rws_registration import RWSRegistrationManager
@@ -19,12 +20,13 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][CONF_EMAIL] = entry.data[CONF_EMAIL]
     robonomics = Robonomics(
         hass,
         entry.data[CONF_SENDER_SEED],
     )
     # async_register_frontend(hass)
-    await RWSRegistrationManager(hass, robonomics).register()
+    await RWSRegistrationManager(hass, robonomics, entry.data[CONF_EMAIL]).register()
     ReportService(hass, robonomics).register()
     error_sources_manager = ErrorSourcesManager(hass)
     error_sources_manager.setup_sources()

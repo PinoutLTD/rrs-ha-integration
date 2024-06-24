@@ -1,6 +1,7 @@
 import logging
 import typing as tp
 import asyncio
+import json
 
 from homeassistant.core import HomeAssistant
 from pyproxy import Libp2pProxyAPI
@@ -37,12 +38,13 @@ class LibP2P:
 
     async def get_and_save_pinata_creds(self) -> bool:
         self._pinata_creds_saved = False
-        self.libp2p_proxy.subscribe_to_protocol_async(
-            self._listen_protocol, self._save_pinata_creds
+        await self.libp2p_proxy.subscribe_to_protocol_async(
+            self._listen_protocol, self._save_pinata_creds, reconnect=True
         )
         await self._send_init_request()
         while not self._pinata_creds_saved:
             await asyncio.sleep(1)
+        _LOGGER.debug("Affter got pinata creds")
         await self.libp2p_proxy.unsubscribe_from_all_protocols()
         return True
 
@@ -69,22 +71,23 @@ class LibP2P:
         return decrypt_message(
             encrypted_data,
             sender_address=PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
-            recipient_seed=self.sender_seed,
-        ).decode()
+            receiver_seed=self.sender_seed,
+        )
 
     async def _send_init_request(self) -> None:
         data = self._format_data_for_init_request()
-        self.libp2p_proxy.send_msg_to_libp2p(
+        _LOGGER.debug(f"Sendig initialisation request: {data}")
+        await self.libp2p_proxy.send_msg_to_libp2p(
             data, LIBP2P_SEND_PROTOCOL, server_peer_id=INTEGRATOR_PEER_ID
         )
 
-    def _format_data_for_init_request(self) -> dict:
+    def _format_data_for_init_request(self) -> str:
         encrypted_email = self._encrypt_message(self.email)
         data = {
             "email": encrypted_email,
             "sender_address": self.sender_address,
         }
-        return data
+        return json.dumps(data)
 
     def _encrypt_message(self, data: str) -> str:
         return encrypt_message(

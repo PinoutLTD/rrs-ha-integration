@@ -14,6 +14,7 @@ from robonomicsinterface import (
 from substrateinterface import Keypair, KeypairType
 from substrateinterface.exceptions import SubstrateRequestException
 from tenacity import Retrying, stop_after_attempt, wait_fixed
+from collections import deque
 
 from .const import ROBONOMICS_WSS, OWNER_ADDRESS
 
@@ -34,6 +35,8 @@ class Robonomics:
         self.sender_address: str = self.sender_account.get_address()
         self.current_wss: str = ROBONOMICS_WSS[0]
         self.subscriber = None
+        self._datalog_queue = deque()
+        self._datalogs_are_sending = False
 
     @staticmethod
     def generate_seed() -> str:
@@ -52,7 +55,7 @@ class Robonomics:
                 await asyncio.sleep(1)
     
     async def send_datalog(self, ipfs_hash: str) -> None:
-        await self.hass.async_add_executor_job(self._send_datalog, ipfs_hash)
+        await self._handle_datalog_request(ipfs_hash)
 
     def _retry_decorator(func: tp.Callable):
         def wrapper(self, *args, **kwargs):
@@ -79,6 +82,21 @@ class Robonomics:
                         return None
         return wrapper
 
+    async def _handle_datalog_request(self, ipfs_hash: str) -> None:
+        self._datalog_queue.append(ipfs_hash)
+        _LOGGER.debug(f"New datalog request, queue length: {len(self._datalog_queue)}")
+        if not self._datalogs_are_sending:
+            await self._async_send_datalog_from_queue()
+
+    async def _async_send_datalog_from_queue(self) -> None:
+        self._datalogs_are_sending = True
+        ipfs_hash = self._datalog_queue.popleft()
+        await self.hass.async_add_executor_job(self._send_datalog, ipfs_hash)
+        if len(self._datalog_queue) > 0:
+            asyncio.ensure_future(self._async_send_datalog_from_queue())
+        else:
+            self._datalogs_are_sending = False
+
     @_retry_decorator
     def _send_datalog(self, ipfs_hash: str) -> None:
         _LOGGER.debug(f"Start creating datalog with ipfs hash: {ipfs_hash}")
@@ -86,7 +104,7 @@ class Robonomics:
             self.sender_account, rws_sub_owner=OWNER_ADDRESS
         )
         receipt = datalog.record(ipfs_hash)
-        _LOGGER.debug(f"Datalog created with hash: {receipt}")
+        _LOGGER.debug(f"Datalog created with hash: {receipt}, {len(self._datalog_queue)} datalogs left in the queue")
 
     def _check_sender_in_rws(self) -> bool:
         rws = RWS(self.sender_account)

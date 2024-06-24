@@ -40,9 +40,9 @@ class ReportService:
         _LOGGER.debug(f"send problem service: {call.data.get('description')}")
         tempdir = await self._create_temp_dir_with_report_data(call)
         ipfs_hash = await self.ipfs.pin_to_pinata(tempdir)
+        self._remove_tempdir(tempdir)
         if ipfs_hash is not None:
             await self.robonomics.send_datalog(ipfs_hash)
-        self._remove_tempdir(tempdir)
 
     async def _create_temp_dir_with_report_data(self, call: ServiceCall) -> str:
         if call.data.get("attach_logs"):
@@ -84,7 +84,7 @@ class ReportService:
         )
 
     def _add_pictures_if_exists(self, tempdir: str, picture_data) -> None:
-        if len(picture_data) != 0:
+        if picture_data is not None:
             i = 1
             for picture in picture_data:
                 decoded_picture_data = base64.b64decode(picture.split(",")[1])
@@ -101,7 +101,7 @@ class ReportService:
         await self.hass.async_add_executor_job(self._add_description_json, call_data, tempdir)
 
     def _add_description_json(self, call_data: dict, tempdir: str) -> None:
-        picture_data = call_data.get("picture")
+        picture_data = call_data.get("picture", [])
         problem_text = call_data.get("description")
         phone_number = call_data.get("phone_number", "")
         json_description = {
