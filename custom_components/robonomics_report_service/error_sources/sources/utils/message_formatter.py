@@ -1,3 +1,5 @@
+import typing as tp
+
 class MessageFormatter:
     @staticmethod
     def format_devices_list(data: dict, first_line_string: str) -> str:
@@ -5,7 +7,7 @@ class MessageFormatter:
         message += "\nDevices:\n"
         for device in data["devices"]:
             message += f"   * {data["devices"][device]['device_name']}\n"
-            message += f"   * Entities:\n"
+            message += "   * Entities:\n"
             for entity_name in data["devices"][device]["entities"]:
                 message += f"       * {entity_name}\n"
         if len(data["entities"]) > 0:
@@ -17,3 +19,10 @@ class MessageFormatter:
     @staticmethod
     def concatinate_messages(message1: str, message2: str) -> str:
         return f"{message1}\n{message2}"
+
+    @staticmethod
+    def format_warnins_message(warnings: tp.List[str]) -> str:
+        message = "Following warninds were detected:\n"
+        for warning in warnings:
+            message += f"*{warning}\n"
+        return message
