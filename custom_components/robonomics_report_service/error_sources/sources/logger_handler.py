@@ -43,7 +43,7 @@ class LoggerHandler(logging.Handler, ErrorSource):
                 _LOGGER.debug(f"New error message: {record.msg}")
                 error_msg = f"{record.name} - {record.levelname}: {record.msg}"
                 asyncio.run_coroutine_threadsafe(
-                    self._run_report_service(error_msg), self.hass.loop
+                    self._run_report_service(error_msg, "errors"), self.hass.loop
                 )
             elif record.levelname == "WARNING":
                 self._warning_messages.append(f"{record.name} - {record.levelname}: {record.msg}")
@@ -54,7 +54,7 @@ class LoggerHandler(logging.Handler, ErrorSource):
             warnings = self._warning_messages.copy()
             self._warning_messages.clear()
             message = MessageFormatter.format_warnins_message(warnings)
-            await self._run_report_service(message)
+            await self._run_report_service(message, "warnings")
         else:
             _LOGGER.debug("Haven't got any warning messages during timeout")
 

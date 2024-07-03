@@ -16,9 +16,10 @@ class ErrorSource(abc.ABC):
     def remove(self):
         pass
 
-    async def _run_report_service(self, description: str):
+    async def _run_report_service(self, description: str, error_type: str):
+        formatted_description = {"description": description, "type": error_type}
         service_data = {
-            "description": description,
+            "description": formatted_description,
             "mail": self.hass.data[DOMAIN][CONF_EMAIL],
             "attach_logs": True,
         }

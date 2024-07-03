@@ -2,18 +2,17 @@ import typing as tp
 
 class MessageFormatter:
     @staticmethod
-    def format_devices_list(data: dict, first_line_string: str) -> str:
-        message = first_line_string
-        message += "\nDevices:\n"
+    def format_devices_list(data: dict, type: str) -> str:
+        message = ""
         for device in data["devices"]:
-            message += f"   * {data["devices"][device]['device_name']}\n"
-            message += "   * Entities:\n"
+            message += f"*{data["devices"][device]['device_name']}:"
             for entity_name in data["devices"][device]["entities"]:
-                message += f"       * {entity_name}\n"
+                message += f"{entity_name},"
+            message += f" - {type}\n"
         if len(data["entities"]) > 0:
-            message += "Entities without devices:\n"
+            message += "*Entities:"
             for entity_name in data["entities"]:
-                message += f"   * {entity_name}\n"
+                message += f"{entity_name},"
         return message
 
     @staticmethod
@@ -22,7 +21,7 @@ class MessageFormatter:
 
     @staticmethod
     def format_warnins_message(warnings: tp.List[str]) -> str:
-        message = "Following warninds were detected:\n"
+        message = ""
         for warning in warnings:
             message += f"*{warning}\n"
         return message
