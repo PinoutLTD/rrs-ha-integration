@@ -44,10 +44,10 @@ class EntitiesStatusChecker(ErrorSource):
         await asyncio.sleep(15)
         unavailables = self._get_unavailables()
         not_updated = await self._get_not_updated()
-        unavailables_text = MessageFormatter.format_devices_list(unavailables, "Found some unavailable devices:")
-        not_updated_text = MessageFormatter.format_devices_list(not_updated, "Found some not updated for a long time devices:")
+        unavailables_text = MessageFormatter.format_devices_list(unavailables, "unavailables")
+        not_updated_text = MessageFormatter.format_devices_list(not_updated, "not updated")
         problem_text = MessageFormatter.concatinate_messages(unavailables_text, not_updated_text)
-        await self._run_report_service(problem_text)
+        await self._run_report_service(problem_text, "unresponded_devices")
 
     def _get_unavailables(self) -> tp.Dict:
         unavailables = []
