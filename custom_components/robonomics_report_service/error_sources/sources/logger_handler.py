@@ -37,16 +37,16 @@ class LoggerHandler(logging.Handler, ErrorSource):
         if self.unsub_timer is not None:
             self.unsub_timer()
 
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord):
         if DOMAIN not in record.name:
             if record.levelname == "ERROR" or record.levelname == "CRITICAL":
-                _LOGGER.debug(f"New error message: {record.msg}")
-                error_msg = f"{record.name} - {record.levelname}: {record.msg}"
+                _LOGGER.debug(f"New error message: {record.message}")
+                error_msg = f"{record.name} - {record.levelname}: {record.message}"
                 asyncio.run_coroutine_threadsafe(
                     self._run_report_service(error_msg, "errors"), self.hass.loop
                 )
             elif record.levelname == "WARNING":
-                self._warning_messages.append(f"{record.name} - {record.levelname}: {record.msg}")
+                self._warning_messages.append(f"{record.name} - {record.levelname}: {record.message}")
 
     async def _send_warnings(self, _ = None) -> None:
         if len(self._warning_messages) > 0:

@@ -137,6 +137,11 @@ async def async_load_from_store(hass, key):
     return await _get_store_for_key(hass, key).async_load() or {}
 
 
+async def async_remove_store(hass: HomeAssistant, key: str):
+    """Remove data from store for given key"""
+    await _get_store_for_key(hass, key).async_remove()
+
+
 async def async_save_to_store(hass, key, data):
     """Generate dynamic data to store and save it to the filesystem.
 

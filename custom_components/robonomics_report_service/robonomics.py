@@ -33,6 +33,7 @@ class Robonomics:
             self.sender_seed, crypto_type=KeypairType.ED25519
         )
         self.sender_address: str = self.sender_account.get_address()
+        _LOGGER.debug(f"Sender address: {self.sender_address}")
         self.current_wss: str = ROBONOMICS_WSS[0]
         self.subscriber = None
         self._datalog_queue = deque()

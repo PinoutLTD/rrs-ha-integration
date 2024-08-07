@@ -25,6 +25,8 @@ from .utils import (
 
 _LOGGER = logging.getLogger(__name__)
 
+LIBP2P_LISTEN_ERRORS_PROTOCOL = "/feedback"
+
 
 class LibP2P:
     def __init__(self, hass: HomeAssistant, sender_seed: str, email: str):
@@ -37,14 +39,18 @@ class LibP2P:
         self._listen_protocol = f"{LIBP2P_LISTEN_PROTOCOL}/{self.sender_address}"
 
     async def get_and_save_pinata_creds(self) -> bool:
+        _LOGGER.debug(f"Start getting Pinata creds")
         self._pinata_creds_saved = False
+        await self.libp2p_proxy.subscribe_to_protocol_async(
+            LIBP2P_LISTEN_ERRORS_PROTOCOL, self._handle_libp2p_feedback, reconnect=True
+        )
         await self.libp2p_proxy.subscribe_to_protocol_async(
             self._listen_protocol, self._save_pinata_creds, reconnect=True
         )
         await self._send_init_request()
         while not self._pinata_creds_saved:
             await asyncio.sleep(1)
-        _LOGGER.debug("Affter got pinata creds")
+        _LOGGER.debug("After got pinata creds")
         await self.libp2p_proxy.unsubscribe_from_all_protocols()
         return True
 
@@ -66,6 +72,12 @@ class LibP2P:
             _LOGGER.debug("Got and saved pinata creds")
         else:
             _LOGGER.error(f"Libp2p message in wrong format: {received_data}")
+    
+    async def _handle_libp2p_feedback(self, received_data: tp.Union[str, dict]):
+        _LOGGER.debug(f"Libp2p feedback: {received_data}")
+        if received_data['feedback'] != "ok":
+            await asyncio.sleep(5)
+            await self._send_init_request()
 
     def _decrypt_message(self, encrypted_data: str) -> str:
         return decrypt_message(

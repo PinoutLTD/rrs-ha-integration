@@ -26,7 +26,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data[CONF_SENDER_SEED],
     )
     # async_register_frontend(hass)
-    await RWSRegistrationManager(hass, robonomics, entry.data[CONF_EMAIL]).register()
+    await RWSRegistrationManager.register(hass, robonomics, entry.data[CONF_EMAIL])
     ReportService(hass, robonomics).register()
     error_sources_manager = ErrorSourcesManager(hass)
     error_sources_manager.setup_sources()
@@ -49,5 +49,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     :return: True if all unload event were success
     """
     hass.data[DOMAIN][ERROR_SOURCES_MANAGER].remove_sources()
+    await RWSRegistrationManager.delete(hass)
     # async_remove_frontend(hass)
     return True

@@ -1,17 +1,24 @@
 from homeassistant.core import HomeAssistant
+import logging
 
 from .robonomics import Robonomics
 from .libp2p import LibP2P
-from .utils import pinata_creds_exists
+from .utils import pinata_creds_exists, async_remove_store
+from .const import STORAGE_PINATA_CREDS
+
+_LOGGER = logging.getLogger(__name__)
 
 class RWSRegistrationManager:
-    def __init__(self, hass: HomeAssistant, robonomics: Robonomics, email: str) -> None:
-        self.hass = hass
-        self.robonomics = robonomics
-        self.libp2p = LibP2P(hass, self.robonomics.sender_seed, email)
 
-    async def register(self) -> None:
-        if not await pinata_creds_exists(self.hass):
-            await self.libp2p.get_and_save_pinata_creds()
-        await self.robonomics.wait_for_rws()
+    @staticmethod
+    async def register(hass: HomeAssistant, robonomics: Robonomics, email: str) -> None:
+        libp2p = LibP2P(hass, robonomics.sender_seed, email)
+        if not await pinata_creds_exists(hass):
+            await libp2p.get_and_save_pinata_creds()
+        await robonomics.wait_for_rws()
+
+    @staticmethod
+    async def delete(hass: HomeAssistant) -> None:
+        _LOGGER.debug("Remove pinata creds store")
+        await async_remove_store(hass, STORAGE_PINATA_CREDS)
     
