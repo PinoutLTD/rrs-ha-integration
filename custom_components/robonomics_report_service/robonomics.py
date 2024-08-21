@@ -17,6 +17,7 @@ from tenacity import Retrying, stop_after_attempt, wait_fixed
 from collections import deque
 
 from .const import ROBONOMICS_WSS, OWNER_ADDRESS
+from .ipfs import IPFS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,8 +56,8 @@ class Robonomics:
             while self.subscriber is not None:
                 await asyncio.sleep(1)
     
-    async def send_datalog(self, ipfs_hash: str) -> None:
-        await self._handle_datalog_request(ipfs_hash)
+    async def send_datalog(self, data_to_send: str) -> None:
+        await self._handle_datalog_request(data_to_send)
 
     def _retry_decorator(func: tp.Callable):
         def wrapper(self, *args, **kwargs):
@@ -77,35 +78,39 @@ class Robonomics:
                             raise e
                         else:
                             _LOGGER.warning(f"Datalog sending exception: {e}")
-                            return None
+                            return False
                     except Exception as e:
                         _LOGGER.warning(f"Datalog sending exeption: {e}")
-                        return None
+                        return False
+                    
         return wrapper
 
-    async def _handle_datalog_request(self, ipfs_hash: str) -> None:
-        self._datalog_queue.append(ipfs_hash)
+    async def _handle_datalog_request(self, data_to_send: str) -> None:
+        self._datalog_queue.append(data_to_send)
         _LOGGER.debug(f"New datalog request, queue length: {len(self._datalog_queue)}")
         if not self._datalogs_are_sending:
             await self._async_send_datalog_from_queue()
 
     async def _async_send_datalog_from_queue(self) -> None:
         self._datalogs_are_sending = True
-        ipfs_hash = self._datalog_queue.popleft()
-        await self.hass.async_add_executor_job(self._send_datalog, ipfs_hash)
+        data_to_send = self._datalog_queue.popleft()
+        res = await self.hass.async_add_executor_job(self._send_datalog, data_to_send)
+        if not res:
+            await IPFS(self.hass).unpin_from_pinata(data_to_send)
         if len(self._datalog_queue) > 0:
             asyncio.ensure_future(self._async_send_datalog_from_queue())
         else:
             self._datalogs_are_sending = False
 
     @_retry_decorator
-    def _send_datalog(self, ipfs_hash: str) -> None:
-        _LOGGER.debug(f"Start creating datalog with ipfs hash: {ipfs_hash}")
+    def _send_datalog(self, data_to_send: str) -> bool:
+        _LOGGER.debug(f"Start creating datalog with data: {data_to_send}")
         datalog = Datalog(
             self.sender_account, rws_sub_owner=OWNER_ADDRESS
         )
-        receipt = datalog.record(ipfs_hash)
+        receipt = datalog.record(data_to_send)
         _LOGGER.debug(f"Datalog created with hash: {receipt}, {len(self._datalog_queue)} datalogs left in the queue")
+        return True
 
     def _check_sender_in_rws(self) -> bool:
         rws = RWS(self.sender_account)

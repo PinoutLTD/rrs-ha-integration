@@ -39,10 +39,10 @@ class ReportService:
     async def send_problem_report(self, call: ServiceCall) -> None:
         _LOGGER.debug(f"send problem service: {call.data.get('description')}")
         tempdir = await self._create_temp_dir_with_report_data(call)
-        ipfs_hash = await self.ipfs.pin_to_pinata(tempdir)
+        data_to_send = await self.ipfs.pin_to_pinata(tempdir)
         self._remove_tempdir(tempdir)
-        if ipfs_hash is not None:
-            await self.robonomics.send_datalog(ipfs_hash)
+        if data_to_send is not None:
+            await self.robonomics.send_datalog(json.dumps(data_to_send))
 
     async def _create_temp_dir_with_report_data(self, call: ServiceCall) -> str:
         if call.data.get("attach_logs"):
