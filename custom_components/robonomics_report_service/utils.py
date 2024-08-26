@@ -6,6 +6,8 @@ import tempfile
 import typing as tp
 import json
 
+from os.path import isdir
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.json import JSONEncoder
 from homeassistant.helpers.storage import Store
@@ -224,3 +226,12 @@ def delete_temp_dir(dirpath: str) -> None:
     """
     shutil.rmtree(dirpath)
 
+def get_tempdir_filenames(dirname_prefix: str) -> tp.List[str]:
+    temp_dirname = tempfile.gettempdir()
+    filenames = os.listdir(temp_dirname)
+    temdir_names = []
+    for filename in filenames:
+        filepath = f"{temp_dirname}/{filename}"
+        if isdir(filepath) and filename.startswith(dirname_prefix):
+            temdir_names.append(filepath)
+    return temdir_names

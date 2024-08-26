@@ -15,6 +15,7 @@ from .rws_registration import RWSRegistrationManager
 from .robonomics import Robonomics
 from .error_sources.error_source_manager import ErrorSourcesManager
 from .report_service import ReportService
+from .libp2p import LibP2P
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,9 +26,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass,
         entry.data[CONF_SENDER_SEED],
     )
+    libp2p = LibP2P(hass, robonomics.sender_seed)
     # async_register_frontend(hass)
-    await RWSRegistrationManager.register(hass, robonomics, entry.data[CONF_EMAIL])
-    ReportService(hass, robonomics).register()
+    await RWSRegistrationManager.register(hass, robonomics, libp2p)
+    await ReportService(hass, robonomics, libp2p).register()
     error_sources_manager = ErrorSourcesManager(hass)
     error_sources_manager.setup_sources()
     hass.data[DOMAIN][ERROR_SOURCES_MANAGER] = error_sources_manager
