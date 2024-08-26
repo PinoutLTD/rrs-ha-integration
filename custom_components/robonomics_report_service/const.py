@@ -1,6 +1,8 @@
 DOMAIN = "robonomics_report_service"
 ADDRESS = "address"
 
+SERVICE_PAID = False
+
 STORAGE_PINATA_CREDS = "pinata_creds"
 
 CONF_EMAIL = "email"
@@ -20,11 +22,12 @@ PROBLEM_REPORT_SERVICE = "report_an_issue"
 LOG_FILE_NAME = "home-assistant.log"
 TRACES_FILE_NAME = ".storage/trace.saved_traces"
 IPFS_PROBLEM_REPORT_FOLDER = "ha_problem_report"
-LOGS_MAX_LEN = 9*1024*1024
+LOGS_MAX_LEN = 3*1024*1024
 
 LIBP2P_WS_SERVER = "ws://127.0.0.1:8888"
 LIBP2P_LISTEN_PROTOCOL = "/pinataCreds"
-LIBP2P_SEND_PROTOCOL = "/initialization"
+LIBP2P_SEND_INITIALISATION_PROTOCOL = "/initialization"
+LIBP2P_SEND_REPORT_PROTOCOL = "/report"
 INTEGRATOR_PEER_ID = "12D3KooWBE2XrMkf1Z6P3AtKqYmvdD59aoD5xwKySrCgkmBqJNFh"
 PROBLEM_SERVICE_ROBONOMICS_ADDRESS = "4HifM6Cny7bHAdLb5jw3hHV2KabuzRZV8gmHG1eh4PxJakwi"
 

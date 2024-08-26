@@ -13,6 +13,7 @@ from .const import (
     PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
     DOMAIN,
     PROBLEM_REPORT_SERVICE,
+    SERVICE_PAID,
 )
 from .ipfs import IPFS
 from .utils import (
@@ -20,29 +21,38 @@ from .utils import (
     create_encrypted_picture,
     encrypt_message,
     delete_temp_dir,
+    get_tempdir_filenames,
 )
 from .robonomics import Robonomics
+from .libp2p import LibP2P
 
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class ReportService:
-    def __init__(self, hass: HomeAssistant, robonomics: Robonomics):
+    def __init__(self, hass: HomeAssistant, robonomics: Robonomics, libp2p: LibP2P):
         self.hass = hass
         self.robonomics = robonomics
         self.ipfs = IPFS(hass)
+        self.libp2p = libp2p
 
-    def register(self) -> None:
+    async def register(self) -> None:
         self.hass.services.async_register(DOMAIN, PROBLEM_REPORT_SERVICE, self.send_problem_report)
+        await self._clear_tempdirs()
 
     async def send_problem_report(self, call: ServiceCall) -> None:
         _LOGGER.debug(f"send problem service: {call.data.get('description')}")
-        tempdir = await self._create_temp_dir_with_report_data(call)
-        data_to_send = await self.ipfs.pin_to_pinata(tempdir)
-        self._remove_tempdir(tempdir)
+        try:
+            tempdir = await self._create_temp_dir_with_report_data(call)
+            data_to_send = await self.ipfs.pin_to_pinata(tempdir)
+        finally:
+            await self._remove_tempdir(tempdir)
         if data_to_send is not None:
-            await self.robonomics.send_datalog(json.dumps(data_to_send))
+            if SERVICE_PAID:
+                await self.robonomics.send_datalog(json.dumps(data_to_send))
+            else:
+                await self.libp2p.send_report(data_to_send, self.robonomics.sender_address)
 
     async def _create_temp_dir_with_report_data(self, call: ServiceCall) -> str:
         if call.data.get("attach_logs"):
@@ -120,7 +130,13 @@ class ReportService:
             recipient_address=PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
         )
 
-    def _remove_tempdir(self, tempdir: str) -> None:
+    async def _clear_tempdirs(self) -> None:
+        dirs_to_delete = get_tempdir_filenames(IPFS_PROBLEM_REPORT_FOLDER)
+        for dirname in dirs_to_delete:
+            await self._remove_tempdir(dirname)
+
+    async def _remove_tempdir(self, tempdir: str) -> None:
         if os.path.exists(tempdir):
-            delete_temp_dir(tempdir)
+            await self.hass.async_add_executor_job(delete_temp_dir, tempdir)
+            _LOGGER.debug(f"Temp directory {tempdir} was deleted")
 
