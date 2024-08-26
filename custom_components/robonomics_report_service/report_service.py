@@ -131,7 +131,7 @@ class ReportService:
         )
 
     async def _clear_tempdirs(self) -> None:
-        dirs_to_delete = get_tempdir_filenames(IPFS_PROBLEM_REPORT_FOLDER)
+        dirs_to_delete = await self.hass.async_add_executor_job(get_tempdir_filenames, IPFS_PROBLEM_REPORT_FOLDER)
         for dirname in dirs_to_delete:
             await self._remove_tempdir(dirname)
 
