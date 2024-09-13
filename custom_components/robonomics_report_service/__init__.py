@@ -4,12 +4,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
-from .const import (
-    CONF_SENDER_SEED,
-    DOMAIN,
-    ERROR_SOURCES_MANAGER,
-    CONF_EMAIL
-)
+
+from .const import CONF_SENDER_SEED, DOMAIN, ERROR_SOURCES_MANAGER, CONF_EMAIL
+
 # from .frontend import async_register_frontend, async_remove_frontend
 from .rws_registration import RWSRegistrationManager
 from .robonomics import Robonomics
@@ -18,6 +15,7 @@ from .report_service import ReportService
 from .libp2p import LibP2P
 
 _LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})

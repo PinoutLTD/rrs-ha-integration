@@ -38,7 +38,9 @@ class ReportService:
         self.libp2p = libp2p
 
     async def register(self) -> None:
-        self.hass.services.async_register(DOMAIN, PROBLEM_REPORT_SERVICE, self.send_problem_report)
+        self.hass.services.async_register(
+            DOMAIN, PROBLEM_REPORT_SERVICE, self.send_problem_report
+        )
         await self._clear_tempdirs()
 
     async def send_problem_report(self, call: ServiceCall) -> None:
@@ -52,7 +54,9 @@ class ReportService:
             if SERVICE_PAID:
                 await self.robonomics.send_datalog(json.dumps(data_to_send))
             else:
-                await self.libp2p.send_report(data_to_send, self.robonomics.sender_address)
+                await self.libp2p.send_report(
+                    data_to_send, self.robonomics.sender_address
+                )
 
     async def _create_temp_dir_with_report_data(self, call: ServiceCall) -> str:
         if call.data.get("attach_logs"):
@@ -108,7 +112,9 @@ class ReportService:
                 i += 1
 
     async def _async_add_description_json(self, call_data: dict, tempdir: str) -> None:
-        await self.hass.async_add_executor_job(self._add_description_json, call_data, tempdir)
+        await self.hass.async_add_executor_job(
+            self._add_description_json, call_data, tempdir
+        )
 
     def _add_description_json(self, call_data: dict, tempdir: str) -> None:
         picture_data = call_data.get("picture", [])
@@ -131,7 +137,9 @@ class ReportService:
         )
 
     async def _clear_tempdirs(self) -> None:
-        dirs_to_delete = await self.hass.async_add_executor_job(get_tempdir_filenames, IPFS_PROBLEM_REPORT_FOLDER)
+        dirs_to_delete = await self.hass.async_add_executor_job(
+            get_tempdir_filenames, IPFS_PROBLEM_REPORT_FOLDER
+        )
         for dirname in dirs_to_delete:
             await self._remove_tempdir(dirname)
 
@@ -139,4 +147,3 @@ class ReportService:
         if os.path.exists(tempdir):
             await self.hass.async_add_executor_job(delete_temp_dir, tempdir)
             _LOGGER.debug(f"Temp directory {tempdir} was deleted")
-
