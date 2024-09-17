@@ -1,61 +1,60 @@
 import logging
-import asyncio
-from datetime import timedelta
 
 _LOGGER = logging.getLogger(__name__)
 
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.core import HomeAssistant, callback, Event
+from homeassistant.components.system_log import DOMAIN as SYSTEM_LOG_DOMAIN
+from homeassistant.components.system_log import EVENT_SYSTEM_LOG
 
 from .error_source import ErrorSource
-from .utils.message_formatter import MessageFormatter
+from .utils.problem_type import ProblemType
 from ...const import DOMAIN
 
-WARNING_SENDING_TIMEOUT = timedelta(hours=4)
 
-class LoggerHandler(logging.Handler, ErrorSource):
+class LoggerHandler(ErrorSource):
     def __init__(self, hass: HomeAssistant):
-        logging.Handler.__init__(self)
         ErrorSource.__init__(self, hass)
-        self.unsub_timer = None
-        self.root_logger = None
-        self._warning_messages = []
+        self.unsub = None
+        self.hass.data[SYSTEM_LOG_DOMAIN].fire_event = True
 
     @callback
     def setup(self):
-        self.root_logger = logging.getLogger()
-        self.root_logger.addHandler(self)
-        self.unsub_timer = async_track_time_interval(
-            self.hass,
-            self._send_warnings,
-            WARNING_SENDING_TIMEOUT,
-        )
+        self.unsub = self.hass.bus.async_listen(EVENT_SYSTEM_LOG, self.new_log)
 
     @callback
     def remove(self):
-        self.root_logger.removeHandler(self)
-        if self.unsub_timer is not None:
-            self.unsub_timer()
+        if self.unsub is not None:
+            self.unsub()
 
-    def emit(self, record: logging.LogRecord):
-        if DOMAIN not in record.name:
-            if record.levelname == "ERROR" or record.levelname == "CRITICAL":
-                _LOGGER.debug(f"New error message: {record.message}")
-                error_msg = f"{record.name} - {record.levelname}: {record.message}"
-                asyncio.run_coroutine_threadsafe(
-                    self._run_report_service(error_msg, "errors"), self.hass.loop
+    async def new_log(self, record_event: Event):
+        _LOGGER.debug(f"New log: {record_event.data}, type: {type(record_event.data)}")
+        record = record_event.data
+        if DOMAIN not in record["name"]:
+            record_type = self._get_record_type(record)
+            if record_type:
+                repeated_error = self._repeated_error(record)
+                _LOGGER.debug(f"New {record_type} message: {record['message']}")
+                error_msg = (
+                    f"{record['name']} - {record['level']}: {record['message'][0]}"
                 )
-            elif record.levelname == "WARNING":
-                self._warning_messages.append(f"{record.name} - {record.levelname}: {record.message}")
+                error_source = record["source"]
+                await self._run_report_service(
+                    error_msg, record_type, error_source, repeated_error
+                )
 
-    async def _send_warnings(self, _ = None) -> None:
-        if len(self._warning_messages) > 0:
-            _LOGGER.debug(f"Got {len(self._warning_messages)} warning messages, start sending report")
-            warnings = self._warning_messages.copy()
-            self._warning_messages.clear()
-            message = MessageFormatter.format_warnins_message(warnings)
-            await self._run_report_service(message, "warnings")
+    def _get_record_type(self, record: dict) -> ProblemType | None:
+        if record["level"] == "ERROR" or record["level"] == "CRITICAL":
+            record_type = ProblemType.Errors
+        elif record["level"] == "WARNING":
+            record_type = ProblemType.Warnings
         else:
-            _LOGGER.debug("Haven't got any warning messages during timeout")
+            record_type = None
+        return record_type
 
-    
+    def _repeated_error(self, record: dict) -> bool:
+        logs = self.hass.data[SYSTEM_LOG_DOMAIN].records.to_list()
+        for log in logs:
+            if log["source"] == record["source"]:
+                return log["count"] > 1
+        else:
+            return False

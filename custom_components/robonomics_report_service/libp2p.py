@@ -25,6 +25,7 @@ from .utils import (
     encrypt_message,
     get_address_for_seed,
 )
+from .ipfs import IPFS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,14 +42,21 @@ class LibP2P:
         self._pinata_creds_saved = False
         self._listen_protocol = f"{LIBP2P_LISTEN_PROTOCOL}/{self.sender_address}"
         self._initialisation = False
+        self._current_report = None
 
     async def send_report(self, report_hashes: tp.Dict, address: str) -> None:
-        # await self._subscribe_to_feedback_protocol()
-        message = self._format_report_message(report_hashes, address)
-        _LOGGER.debug(f"Sending report using libp2p: {message}")
-        await self.libp2p_proxy.send_msg_to_libp2p(
-            message, LIBP2P_SEND_REPORT_PROTOCOL, server_peer_id=INTEGRATOR_PEER_ID
-        )
+        self._current_report = report_hashes
+        try:
+            await self._subscribe_to_feedback_protocol()
+            message = self._format_report_message(report_hashes, address)
+            _LOGGER.debug(f"Sending report using libp2p: {message}")
+            await self.libp2p_proxy.send_msg_to_libp2p(
+                message, LIBP2P_SEND_REPORT_PROTOCOL, server_peer_id=INTEGRATOR_PEER_ID
+            )
+        except Exception as e:
+            _LOGGER.error(f"Error in sending report: {e}")
+            await IPFS(self.hass).unpin_from_pinata(self._current_report)
+            self._current_report = None
 
     async def get_and_save_pinata_creds(self) -> bool:
         _LOGGER.debug("Start getting Pinata creds")
@@ -68,7 +76,7 @@ class LibP2P:
 
     async def _subscribe_to_feedback_protocol(self) -> None:
         await self.libp2p_proxy.subscribe_to_protocol_async(
-            LIBP2P_LISTEN_ERRORS_PROTOCOL, self._handle_libp2p_feedback, reconnect=True
+            LIBP2P_LISTEN_ERRORS_PROTOCOL, self._handle_libp2p_feedback, reconnect=False
         )
 
     async def _save_pinata_creds(self, received_data: tp.Union[str, dict]):
@@ -89,14 +97,20 @@ class LibP2P:
             _LOGGER.debug("Got and saved pinata creds")
         else:
             _LOGGER.error(f"Libp2p message in wrong format: {received_data}")
-    
+
     async def _handle_libp2p_feedback(self, received_data: tp.Union[str, dict]):
-        _LOGGER.debug(f"Libp2p feedback on {'initialisation' if self._initialisation else 'report'}: {received_data}")
-        if received_data['feedback'] != "ok":
+        _LOGGER.debug(
+            f"Libp2p feedback on {'initialisation' if self._initialisation else 'report'}: {received_data}"
+        )
+        if received_data["feedback"] != "ok":
             if self._initialisation:
                 await asyncio.sleep(5)
                 await self._send_init_request()
         if not self._initialisation:
+            if received_data["feedback"] != "ok":
+                if self._current_report is not None:
+                    await IPFS(self.hass).unpin_from_pinata(self._current_report)
+            self._current_report = None
             await self.libp2p_proxy.unsubscribe_from_all_protocols()
 
     def _decrypt_message(self, encrypted_data: str) -> str:
@@ -120,7 +134,7 @@ class LibP2P:
             "sender_address": self.sender_address,
         }
         return json.dumps(data)
-    
+
     def _format_report_message(self, report_hashes: tp.Dict, address: str) -> str:
         return json.dumps({"report": report_hashes, "address": address})
 
