@@ -71,6 +71,7 @@ class IPFS:
     def _unpin_from_pinata(self, ipfs_hashes_dict: tp.Dict, pinata: PinataPy) -> None:
         _LOGGER.debug(f"Start removing pins: {ipfs_hashes_dict}")
         for key in ipfs_hashes_dict:
-            current_hash = ipfs_hashes_dict[key]
-            res = pinata.remove_pin_from_ipfs(current_hash)
-            _LOGGER.debug(f"Remove response for pin {current_hash}: {res}")
+            current_hash: str = ipfs_hashes_dict[key]
+            if isinstance(current_hash, str) and current_hash.startswith("Qm"):
+                res = pinata.remove_pin_from_ipfs(current_hash)
+                _LOGGER.debug(f"Remove response for pin {current_hash}: {res}")

@@ -4,7 +4,9 @@ import logging
 import asyncio
 
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
-from homeassistant.helpers.device_registry import async_get as async_get_devices_registry
+from homeassistant.helpers.device_registry import (
+    async_get as async_get_devices_registry,
+)
 from homeassistant.helpers.entity_registry import RegistryEntry
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.core import HomeAssistant, State, callback
@@ -15,6 +17,7 @@ from homeassistant.helpers.event import async_track_time_interval
 
 from .error_source import ErrorSource
 from .utils.message_formatter import MessageFormatter
+from .utils.problem_type import ProblemType
 from ...const import CHECK_ENTITIES_TIMEOUT
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,14 +43,20 @@ class EntitiesStatusChecker(ErrorSource):
     def remove(self) -> None:
         self.unsub_timer()
 
-    async def _check_entities(self, _ = None):
+    async def _check_entities(self, _=None):
         await asyncio.sleep(15)
         unavailables = self._get_unavailables()
         not_updated = await self._get_not_updated()
-        unavailables_text = MessageFormatter.format_devices_list(unavailables, "unavailables")
-        not_updated_text = MessageFormatter.format_devices_list(not_updated, "not updated")
-        problem_text = MessageFormatter.concatinate_messages(unavailables_text, not_updated_text)
-        await self._run_report_service(problem_text, "unresponded_devices")
+        unavailables_text = MessageFormatter.format_devices_list(
+            unavailables, "unavailables"
+        )
+        not_updated_text = MessageFormatter.format_devices_list(
+            not_updated, "not updated"
+        )
+        problem_text = MessageFormatter.concatinate_messages(
+            unavailables_text, not_updated_text
+        )
+        await self._run_report_service(problem_text, ProblemType.Devices, "devices")
 
     def _get_unavailables(self) -> tp.Dict:
         unavailables = []
@@ -64,10 +73,12 @@ class EntitiesStatusChecker(ErrorSource):
             if not self._is_available(entity) or entity_data.disabled:
                 continue
             if entity_data.entity_id.split(".")[0] == "sensor":
-                if not await self._check_state_changed_during_period(entity_data.entity_id):
+                if not await self._check_state_changed_during_period(
+                    entity_data.entity_id
+                ):
                     not_updated.append(entity_data.entity_id)
         return self._get_dict_with_devices(not_updated)
-    
+
     def _get_dict_with_devices(self, entities_list: tp.List[str]) -> tp.Dict:
         res_dict = {"devices": {}, "entities": []}
         for entity_id in entities_list:
@@ -75,9 +86,14 @@ class EntitiesStatusChecker(ErrorSource):
             if entity_data.device_id is not None:
                 device = self.devices_registry.async_get(entity_data.device_id)
                 if entity_data.device_id in res_dict["devices"]:
-                    res_dict["devices"][entity_data.device_id]["entities"].append(entity_id)
+                    res_dict["devices"][entity_data.device_id]["entities"].append(
+                        entity_id
+                    )
                 else:
-                    res_dict["devices"][entity_data.device_id] = {"device_name": self._get_device_name(device), "entities": [entity_id]}
+                    res_dict["devices"][entity_data.device_id] = {
+                        "device_name": self._get_device_name(device),
+                        "entities": [entity_id],
+                    }
             else:
                 res_dict["entities"].append(entity_id)
         return res_dict
@@ -94,9 +110,10 @@ class EntitiesStatusChecker(ErrorSource):
         entity_state = self.hass.states.get(entity)
         if entity_state is not None:
             return entity_state.state != STATE_UNAVAILABLE
-            
 
-    async def _check_state_changed_during_period(self, entity_id: str, hours: int = 26) -> bool:
+    async def _check_state_changed_during_period(
+        self, entity_id: str, hours: int = 26
+    ) -> bool:
         start = dt_util.utcnow() - timedelta(hours=hours)
         end = dt_util.utcnow()
         instance = get_instance(self.hass)
@@ -119,7 +136,7 @@ class EntitiesStatusChecker(ErrorSource):
                 return False
         else:
             return False
-    
+
     def _state_changes_during_period(
         self,
         start: datetime,

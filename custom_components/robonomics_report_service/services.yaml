@@ -2,6 +2,12 @@ report_an_issue:
   name: Send problem report
   description: Send a report about any problem with your Smart Home
   fields:
+    only_description:
+      description: True for repeated errors
+      name: Only Description
+      required: true
+      selector:
+        boolean:
     description:
       description: Describe your problem
       name: Description
@@ -20,12 +26,6 @@ report_an_issue:
       required: false
       selector: 
         text:
-    attach_logs:
-      description: Attach logs to the report or not (Recomended)
-      name: Attach logs
-      required: true
-      selector:
-        boolean:
     picture:
       description: You can attach the photo or screenshot to illustrate the problem
       name: Picture

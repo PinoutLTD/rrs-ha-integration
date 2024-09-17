@@ -19,9 +19,3 @@ class MessageFormatter:
     def concatinate_messages(message1: str, message2: str) -> str:
         return f"{message1}\n{message2}"
 
-    @staticmethod
-    def format_warnins_message(warnings: tp.List[str]) -> str:
-        message = ""
-        for warning in warnings:
-            message += f"*{warning}\n"
-        return message

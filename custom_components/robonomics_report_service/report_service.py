@@ -5,6 +5,7 @@ import json
 import typing as tp
 
 from homeassistant.core import ServiceCall, HomeAssistant
+from homeassistant.components.system_log import DOMAIN as SYSTEM_LOG_DOMAIN
 
 from .const import (
     LOG_FILE_NAME,
@@ -44,25 +45,33 @@ class ReportService:
         await self._clear_tempdirs()
 
     async def send_problem_report(self, call: ServiceCall) -> None:
-        _LOGGER.debug(f"send problem service: {call.data.get('description')}")
-        try:
-            tempdir = await self._create_temp_dir_with_report_data(call)
-            data_to_send = await self.ipfs.pin_to_pinata(tempdir)
-        finally:
-            await self._remove_tempdir(tempdir)
+        _LOGGER.debug(
+            f"send problem service with logs: {not call.data.get('only_description')}: {call.data.get('description')}"
+        )
+        if call.data.get("only_description"):
+            data_to_send = self._create_data_for_repeated_errors(
+                call.data.get("description")
+            )
+        else:
+            try:
+                tempdir = await self._create_temp_dir_with_report_data(call)
+                data_to_send = await self.ipfs.pin_to_pinata(tempdir)
+            finally:
+                await self._remove_tempdir(tempdir)
         if data_to_send is not None:
-            if SERVICE_PAID:
+            if SERVICE_PAID and not call.data.get("only_description"):
                 await self.robonomics.send_datalog(json.dumps(data_to_send))
             else:
                 await self.libp2p.send_report(
                     data_to_send, self.robonomics.sender_address
                 )
 
+    def _create_data_for_repeated_errors(self, description: dict) -> dict:
+        encrypted = json.loads(self._encrypt_json({"description": description}))
+        return {"issue_description.json": encrypted}
+
     async def _create_temp_dir_with_report_data(self, call: ServiceCall) -> str:
-        if call.data.get("attach_logs"):
-            files = self._get_logs_files()
-        else:
-            files = []
+        files = self._get_logs_files()
         tempdir: str = await self._async_create_temp_dir_with_encrypted_files(files)
         await self._async_add_pictures_if_exists(tempdir, call.data.get("picture"))
         await self._async_add_description_json(call.data, tempdir)
