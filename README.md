@@ -8,6 +8,13 @@ Integration for Home Assistant that allows you to send error reports about your 
 
 **1. Install files**
 
+1.1 Using HACS
+
+In the HACS panel, navigate to `Integrations` and click on the three dots in the upper-right corner. Select `Custom Repositories`, insert the [link](https://github.com/PinoutLTD/rrs-ha-integration) and choose `Integration` as the type.
+
+![hacs](media/hacs.png)
+
+1.2 Manually
 Clone the [repository](https://github.com/PinoutLTD/rrs-ha-integration) and copy `custom_components` folder to your Home Assistant config directory.
 
 **2. Restart HA to load the integration into HA.**
