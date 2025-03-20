@@ -72,6 +72,8 @@ class EntitiesStatusChecker(ErrorSource):
             entity_data = self.entity_registry.async_get(entity)
             if not self._is_available(entity) or entity_data.disabled:
                 continue
+            if "sun_next" in entity_data.entity_id:
+                continue
             if entity_data.entity_id.split(".")[0] == "sensor":
                 if not await self._check_state_changed_during_period(
                     entity_data.entity_id

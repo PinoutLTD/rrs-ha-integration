@@ -1,5 +1,6 @@
 import base64
 import logging
+import asyncio
 import os
 import json
 import typing as tp
@@ -16,19 +17,21 @@ from .const import (
     PROBLEM_REPORT_SERVICE,
     SERVICE_PAID,
 )
-from .ipfs import IPFS
+from .ipfs import IPFS, PinataKeysRewoked
 from .utils import (
     create_temp_dir_with_encrypted_files,
-    create_encrypted_picture,
     encrypt_message,
     delete_temp_dir,
     get_tempdir_filenames,
 )
 from .robonomics import Robonomics
 from .libp2p import LibP2P
+from .report_model import ReportData, ReportStatus
+from .rws_registration import RWSRegistrationManager
 
 
 _LOGGER = logging.getLogger(__name__)
+
 
 
 class ReportService:
@@ -37,11 +40,14 @@ class ReportService:
         self.robonomics = robonomics
         self.ipfs = IPFS(hass)
         self.libp2p = libp2p
+        self._pending_reports: dict[str, ReportData] = {}
+        self._requesting_new_pinata_creds = False
 
     async def register(self) -> None:
         self.hass.services.async_register(
             DOMAIN, PROBLEM_REPORT_SERVICE, self.send_problem_report
         )
+        self.libp2p.register_report_handler(self._handle_report_response)
         await self._clear_tempdirs()
 
     async def send_problem_report(self, call: ServiceCall) -> None:
@@ -53,28 +59,57 @@ class ReportService:
                 call.data.get("description")
             )
         else:
-            try:
-                tempdir = await self._create_temp_dir_with_report_data(call)
-                data_to_send = await self.ipfs.pin_to_pinata(tempdir)
-            finally:
-                await self._remove_tempdir(tempdir)
+            data_to_send = await self._create_data_for_errors_with_logs(call.data)
         if data_to_send is not None:
-            if SERVICE_PAID and not call.data.get("only_description"):
-                await self.robonomics.send_datalog(json.dumps(data_to_send))
-            else:
-                await self.libp2p.send_report(
-                    data_to_send, self.robonomics.sender_address
-                )
+            new_report = ReportData.create(data_to_send, call.data.get("description"))
+            self._pending_reports[new_report.id] = new_report
+            await self.libp2p.send_report(
+                new_report.encrypted_data, new_report.id
+            )
+
+    async def _handle_report_response(self, report_id: str, response: dict) -> None:
+        if not response["datalog"]:
+            self._pending_reports.pop(report_id)
+            _LOGGER.debug(f"Report {report_id} is finished without datalog")
+        else:
+            report = self._pending_reports.get(report_id)
+            _LOGGER.debug(f"Report {report_id} will be sent in datalog, report: {report}")
+            if report:
+                asyncio.ensure_future(self._send_report_to_datalog(report, response["ticket_ids"]))
+
+    async def _send_report_to_datalog(self, report: ReportData, ticket_ids: list) -> None:
+        if "home-assistant.log" in report.encrypted_data:
+            _LOGGER.debug(f"Report {report.id} has encrypted logs")
+            await self.robonomics.send_datalog(report.encrypted_data)
+        else:
+            _LOGGER.debug(f"Report {report.id} doesn't have encrypted logs")
+            data_to_send = await self._create_data_for_errors_with_logs({"description": report.description})
+            data_to_send["ticket_ids"] = ticket_ids.copy()
+            await self.robonomics.send_datalog(data_to_send)
+
+    async def _create_data_for_errors_with_logs(self, issue_description: dict) -> dict:
+        try:
+            tempdir = await self._create_temp_dir_with_report_data(issue_description)
+            while self._requesting_new_pinata_creds:
+                await asyncio.sleep(1)
+            data_to_send = await self.ipfs.pin_to_pinata(tempdir)
+        except PinataKeysRewoked:
+            self._requesting_new_pinata_creds = True
+            await RWSRegistrationManager.request_new_pinata_creds(self.hass, self.robonomics, self.libp2p)
+            self._requesting_new_pinata_creds = False
+            data_to_send = await self.ipfs.pin_to_pinata(tempdir)
+        finally:
+            await self._remove_tempdir(tempdir)
+        return data_to_send
 
     def _create_data_for_repeated_errors(self, description: dict) -> dict:
-        encrypted = json.loads(self._encrypt_json({"description": description}))
+        encrypted = self.robonomics.encrypt_for_integrator({"description": description})
         return {"issue_description.json": encrypted}
 
-    async def _create_temp_dir_with_report_data(self, call: ServiceCall) -> str:
+    async def _create_temp_dir_with_report_data(self, issue_description: dict) -> str:
         files = self._get_logs_files()
         tempdir: str = await self._async_create_temp_dir_with_encrypted_files(files)
-        await self._async_add_pictures_if_exists(tempdir, call.data.get("picture"))
-        await self._async_add_description_json(call.data, tempdir)
+        await self._async_add_description_json(issue_description, tempdir)
         return tempdir
 
     def _get_logs_files(self) -> tp.List[str]:
@@ -101,49 +136,19 @@ class ReportService:
             PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
         )
 
-    async def _async_add_pictures_if_exists(self, tempdir: str, picture_data) -> None:
-        await self.hass.async_add_executor_job(
-            self._add_pictures_if_exists, tempdir, picture_data
-        )
-
-    def _add_pictures_if_exists(self, tempdir: str, picture_data) -> None:
-        if picture_data is not None:
-            i = 1
-            for picture in picture_data:
-                decoded_picture_data = base64.b64decode(picture.split(",")[1])
-                create_encrypted_picture(
-                    decoded_picture_data,
-                    i,
-                    tempdir,
-                    self.robonomics.sender_seed,
-                    PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
-                )
-                i += 1
-
     async def _async_add_description_json(self, call_data: dict, tempdir: str) -> None:
         await self.hass.async_add_executor_job(
             self._add_description_json, call_data, tempdir
         )
 
     def _add_description_json(self, call_data: dict, tempdir: str) -> None:
-        picture_data = call_data.get("picture", [])
         problem_text = call_data.get("description")
-        phone_number = call_data.get("phone_number", "")
         json_description = {
             "description": problem_text,
-            "phone_number": phone_number,
-            "pictures_count": len(picture_data),
         }
-        encrypted_description = self._encrypt_json(json_description)
+        encrypted_description = self.robonomics.multi_device_encrypt(json_description)
         with open(f"{tempdir}/issue_description.json", "w") as f:
             f.write(encrypted_description)
-
-    def _encrypt_json(self, data: dict) -> str:
-        return encrypt_message(
-            json.dumps(data),
-            sender_seed=self.robonomics.sender_seed,
-            recipient_address=PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
-        )
 
     async def _clear_tempdirs(self) -> None:
         dirs_to_delete = await self.hass.async_add_executor_job(

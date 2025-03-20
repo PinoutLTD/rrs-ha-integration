@@ -24,7 +24,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass,
         entry.data[CONF_SENDER_SEED],
     )
-    libp2p = LibP2P(hass, robonomics.sender_seed)
+    await robonomics.setup()
+    libp2p = LibP2P(robonomics.sender_address)
     # async_register_frontend(hass)
     await RWSRegistrationManager.register(hass, robonomics, libp2p)
     await ReportService(hass, robonomics, libp2p).register()
