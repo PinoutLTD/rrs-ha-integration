@@ -14,21 +14,3 @@ report_an_issue:
       required: true
       selector:
         text:
-    mail:
-      description: E-mail address to contact you
-      name: E-mail 
-      required: true
-      selector:
-        text:
-    phone_number:
-      description: Phone number to contact you (Optional)
-      name: Phone Number
-      required: false
-      selector: 
-        text:
-    picture:
-      description: You can attach the photo or screenshot to illustrate the problem
-      name: Picture
-      required: false
-      selector:
-        text:

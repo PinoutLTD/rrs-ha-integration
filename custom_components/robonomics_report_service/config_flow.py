@@ -9,16 +9,16 @@ from .const import (
     DOMAIN,
     CONF_EMAIL,
     CONF_SENDER_SEED,
-    CONF_PHONE_NUMBER,
 )
 from .robonomics import Robonomics
+from .rws_registration import RWSRegistrationManager
+from .libp2p import LibP2P
 
 _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_EMAIL): str,
-        vol.Optional(CONF_PHONE_NUMBER): str,
     }
 )
 
@@ -57,6 +57,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 description_placeholders={"seed": self.user_data[CONF_SENDER_SEED]},
             )
         else:
+            robonomics = Robonomics(
+                self.hass,
+                self.user_data[CONF_SENDER_SEED],
+            )
+            await robonomics.setup()
+            libp2p = LibP2P(robonomics.sender_address)
+            # async_register_frontend(hass)
+            await RWSRegistrationManager.register(self.hass, robonomics, libp2p, self.user_data[CONF_EMAIL])
             return self.async_create_entry(
                 title="Robonomics Report Service", data=self.user_data
             )

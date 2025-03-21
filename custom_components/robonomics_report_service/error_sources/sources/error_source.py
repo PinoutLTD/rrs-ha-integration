@@ -1,7 +1,8 @@
 import abc
+import asyncio
 from homeassistant.core import HomeAssistant
 
-from ...const import DOMAIN, PROBLEM_REPORT_SERVICE, CONF_EMAIL, CONF_PHONE_NUMBER
+from ...const import DOMAIN, PROBLEM_REPORT_SERVICE, CONF_EMAIL
 from .utils.problem_type import ProblemType
 
 
@@ -34,8 +35,8 @@ class ErrorSource(abc.ABC):
             "mail": self.hass.data[DOMAIN][CONF_EMAIL],
             "only_description": repeated_error,
         }
-        if CONF_PHONE_NUMBER in self.hass.data[DOMAIN]:
-            service_data["phone_number"] = self.hass.data[DOMAIN][CONF_PHONE_NUMBER]
-        await self.hass.services.async_call(
-            DOMAIN, PROBLEM_REPORT_SERVICE, service_data=service_data
+        self.hass.async_create_task(
+            self.hass.services.async_call(
+                DOMAIN, PROBLEM_REPORT_SERVICE, service_data=service_data
+            )
         )

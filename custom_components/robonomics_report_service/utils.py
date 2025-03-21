@@ -14,19 +14,19 @@ from homeassistant.helpers.storage import Store
 from robonomicsinterface import Account
 from substrateinterface import Keypair, KeypairType
 
-from .const import LOGS_MAX_LEN, STORAGE_PINATA_CREDS, CONF_PINATA_PUBLIC, CONF_PINATA_SECRET
+from .const import LOGS_MAX_LEN, STORAGE_CREDENTIALS, CONF_PINATA_PUBLIC, CONF_PINATA_SECRET
 
 _LOGGER = logging.getLogger(__name__)
 
 VERSION_STORAGE = 6
 
-def encrypt_message(message, sender_seed: str, recipient_address: str) -> str:
+def multi_device_encrypt_message(message, sender_seed: str, recipient_address: str) -> str:
     try:
         random_seed = Keypair.generate_mnemonic()
         random_acc = Account(random_seed, crypto_type=KeypairType.ED25519)
         sender_acc = Account(sender_seed, crypto_type=KeypairType.ED25519)
         sender_keypair = sender_acc.keypair
-        encrypted_data = _encrypt_message(
+        encrypted_data = encrypt_message(
             str(message), sender_keypair, random_acc.keypair.public_key
         )
         devices = [recipient_address, sender_acc.get_address()]
@@ -37,7 +37,7 @@ def encrypt_message(message, sender_seed: str, recipient_address: str) -> str:
                 receiver_kp = Keypair(
                     ss58_address=device, crypto_type=KeypairType.ED25519
                 )
-                encrypted_key = _encrypt_message(
+                encrypted_key = encrypt_message(
                     random_seed, sender_keypair, receiver_kp.public_key
                 )
                 encrypted_keys[device] = encrypted_key
@@ -51,7 +51,7 @@ def encrypt_message(message, sender_seed: str, recipient_address: str) -> str:
     except Exception as e:
         _LOGGER.error(f"Exception in encrypt for devices: {e}")
 
-def _encrypt_message(
+def encrypt_message(
     message: tp.Union[bytes, str],
     sender_keypair: Keypair,
     recipient_public_key: bytes,
@@ -68,10 +68,13 @@ def _encrypt_message(
     return f"0x{encrypted.hex()}"
 
 def decrypt_message(encrypted_message: str, receiver_seed: str, sender_address: str) -> str:
+    recipient_acc = Account(receiver_seed, crypto_type=KeypairType.ED25519)
+    sender_kp = Keypair(ss58_address=sender_address)
     try:
         data_json = json.loads(encrypted_message)
-        recipient_acc = Account(receiver_seed, crypto_type=KeypairType.ED25519)
-        sender_kp = Keypair(ss58_address=sender_address)
+    except:
+        return _decrypt_message(encrypted_message, sender_kp.public_key, recipient_acc.keypair).decode("utf-8")
+    try:
         if recipient_acc.get_address() in data_json:
             decrypted_seed = _decrypt_message(
                 data_json[recipient_acc.get_address()],
@@ -107,12 +110,8 @@ def _decrypt_message(
 
     return recipient_keypair.decrypt_message(bytes_encrypted, sender_public_key)
 
-def get_address_for_seed(seed: str) -> str:
-    acc = Account(seed, crypto_type=KeypairType.ED25519)
-    return acc.get_address()
-
 async def pinata_creds_exists(hass: HomeAssistant) -> bool:
-    storage_data = await async_load_from_store(hass, STORAGE_PINATA_CREDS)
+    storage_data = await async_load_from_store(hass, STORAGE_CREDENTIALS)
     res = CONF_PINATA_PUBLIC in storage_data and CONF_PINATA_SECRET in storage_data
     _LOGGER.debug(f"Pinata creds exists: {res}")
     return res
@@ -120,7 +119,7 @@ async def pinata_creds_exists(hass: HomeAssistant) -> bool:
 
 def _get_store_key(key):
     """Return the key to use with homeassistant.helpers.storage.Storage."""
-    return f"robonomics.{key}"
+    return f"robonomics_report_service.{key}"
 
 
 def _get_store_for_key(hass, key):
@@ -161,29 +160,13 @@ async def async_save_to_store(hass, key, data):
     _LOGGER.debug(f"Content in .storage/{_get_store_key(key)} was't changed")
 
 
-def create_encrypted_picture(
-    data: bytes,
-    number_of_picture: int,
-    dirname: str,
-    sender_seed: tp.Optional[str] = None,
-    receiver_address: tp.Optional[str] = None,
-) -> str:
-    encrypted_data = encrypt_message(data, sender_seed, receiver_address)
-    picture_path = f"{dirname}/picture{number_of_picture}"
-    with open(picture_path, "w") as f:
-        f.write(encrypted_data)
-    _LOGGER.debug(f"Created encrypted picture: {picture_path}")
-    return picture_path
-
-
 def create_temp_dir_with_encrypted_files(
     dirname: str,
     files: tp.List[str],
     sender_seed: tp.Optional[str],
     receiver_address: tp.Optional[str],
 ) -> str:
-    """
-    Create directory in tepmoral directory and copy there files
+    """Create directory in tepmoral directory and copy there files.
 
     :param dirname: the name of the directory to create
     :param files: list of file pathes to copy
@@ -193,12 +176,13 @@ def create_temp_dir_with_encrypted_files(
     try:
         temp_dirname = tempfile.gettempdir()
         dirpath = f"{temp_dirname}/{dirname}"
+        _LOGGER.debug("Start creating tempdir %s", dirpath)
         if os.path.exists(dirpath):
             dirpath += str(random.randint(1, 1000))
         try:
             os.mkdir(dirpath)
         except Exception as e:
-            _LOGGER.debug(f"Can't create tempdir: {e}, retrying...")
+            _LOGGER.warning("Can't create tempdir: %s, retrying...", e)
             return create_temp_dir_with_encrypted_files(dirname, files, sender_seed, receiver_address)
         for filepath in files:
             filename = filepath.split("/")[-1]
@@ -206,7 +190,7 @@ def create_temp_dir_with_encrypted_files(
                 with open(filepath, "r") as f:
                     data = f.read()
                 data = data[-LOGS_MAX_LEN:]
-                encrypted_data = encrypt_message(
+                encrypted_data = multi_device_encrypt_message(
                     data, sender_seed, receiver_address
                 )
                 with open(f"{dirpath}/{filename}", "w") as f:

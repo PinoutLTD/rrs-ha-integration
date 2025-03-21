@@ -3,14 +3,14 @@ ADDRESS = "address"
 
 SERVICE_PAID = False
 
-STORAGE_PINATA_CREDS = "pinata_creds"
+STORAGE_CREDENTIALS = "credentials"
 
 CONF_EMAIL = "email"
 CONF_OWNER_ADDRESS = "owner_address"
 CONF_PINATA_SECRET = "pinata_secret"
 CONF_PINATA_PUBLIC = "pinata_public"
 CONF_SENDER_SEED = "sender_seed"
-CONF_PHONE_NUMBER = "phone_number"
+CONF_INTEGRATOR_ADDRESS = "integrator_address"
 
 ROBONOMICS_WSS = [
     "wss://kusama.rpc.robonomics.network/",

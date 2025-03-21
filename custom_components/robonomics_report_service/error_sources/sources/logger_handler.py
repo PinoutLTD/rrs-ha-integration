@@ -1,4 +1,5 @@
 import logging
+import asyncio
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class LoggerHandler(ErrorSource):
         if DOMAIN not in record["name"]:
             record_type = self._get_record_type(record)
             if record_type:
-                repeated_error = self._repeated_error(record)
+                repeated_error = await self._repeated_error(record)
                 _LOGGER.debug(f"New {record_type} message: {record['message']}")
                 error_msg = (
                     f"{record['name']} - {record['level']}: {record['message'][0]}"
@@ -51,8 +52,8 @@ class LoggerHandler(ErrorSource):
             record_type = None
         return record_type
 
-    def _repeated_error(self, record: dict) -> bool:
-        logs = self.hass.data[SYSTEM_LOG_DOMAIN].records.to_list()
+    async def _repeated_error(self, record: dict) -> bool:
+        logs = await asyncio.to_thread(self.hass.data[SYSTEM_LOG_DOMAIN].records.to_list)
         for log in logs:
             if log["source"] == record["source"]:
                 return log["count"] > 1
