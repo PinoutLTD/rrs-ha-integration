@@ -146,10 +146,7 @@ class Robonomics:
         datalog = Datalog(
             self.sender_account, rws_sub_owner=self.sender_address
         )
-        # datalog = Datalog(self.sender_account)
-        data_to_send = "hello"
         receipt = datalog.record(data_to_send)
-        # receipt = "hhh"
         _LOGGER.debug(f"Datalog created with hash: {receipt}, {len(self._datalog_queue)} datalogs left in the queue")
         return True
 
