@@ -6,7 +6,6 @@ from .libp2p import LibP2P
 from .utils import pinata_creds_exists, async_remove_store, async_save_to_store
 from .const import (
     STORAGE_CREDENTIALS,
-    SERVICE_PAID,
     CONF_PINATA_PUBLIC,
     CONF_PINATA_SECRET,
     DOMAIN,

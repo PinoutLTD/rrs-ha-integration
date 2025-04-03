@@ -44,6 +44,11 @@ class LibP2P:
     def register_report_handler(self, handler: tp.Awaitable) -> None:
         self._report_instanse.register_report_handler(handler)
 
+    async def disconnect(self) -> None:
+        _LOGGER.debug("Start disconnect from libp2p")
+        await self._libp2p_proxy.unsubscribe_from_all_protocols()
+        _LOGGER.debug("Finish disconnect from libp2p")
+
 
 class LibP2PReports:
     def __init__(self, libp2p_proxy: Libp2pProxyAPI, hass_address: str) -> None:

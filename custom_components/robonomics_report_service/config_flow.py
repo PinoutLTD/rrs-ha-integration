@@ -4,6 +4,7 @@ import logging
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
+from tenacity import retry, stop_after_attempt, wait_fixed, after_log
 
 from .const import (
     DOMAIN,
@@ -63,9 +64,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             await robonomics.setup()
             libp2p = LibP2P(robonomics.sender_address)
-            # async_register_frontend(hass)
-            await RWSRegistrationManager.register(self.hass, robonomics, libp2p, self.user_data[CONF_EMAIL])
+            await self.register_with_retry(robonomics, libp2p)
             return self.async_create_entry(
                 title="Robonomics Report Service", data=self.user_data
             )
+
+    @retry(stop=stop_after_attempt(4), wait=wait_fixed(4), after=after_log(_LOGGER, logging.WARNING))
+    async def register_with_retry(self, robonomics: Robonomics, libp2p: LibP2P):
+        await RWSRegistrationManager.register(self.hass, robonomics, libp2p, self.user_data[CONF_EMAIL])
 

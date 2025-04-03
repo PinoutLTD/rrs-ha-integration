@@ -3,7 +3,7 @@
         "step": {
             "user": {
                 "title": "Robonomics Report Service",
-                "description": "Enter your e-mail address to pay for the subscription. if you have already paid for it, you can enter your account seed.",
+                "description": "Enter your e-mail address to pay for the subscription.",
                 "data": {
                     "email": "E-mail Address",
                     "phone_number": "Phone number (Optional)"
@@ -11,7 +11,7 @@
             },
             "seed": {
                 "title": "Robonomics Report Service",
-                "description": "Save your mnemonic seed safely\n \n```\n{seed}\n```\n"
+                "description": "Save your mnemonic seed safely \n\n`\n{seed}\n`"
             }
         },
         "progress": {
