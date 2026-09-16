@@ -15,6 +15,7 @@ from .envelope import (
     encrypt_for_recipients,
     parse_decrypted,
 )
+from .extrinsic import ExtrinsicBuilder, ExtrinsicError, RuntimeInfo
 from .keys import ECDSA, ED25519, SR25519, Keypair, UnsupportedCryptoTypeError
 from .ss58 import ss58_decode, ss58_encode
 
@@ -22,6 +23,9 @@ __all__ = [
     "ECDSA",
     "MnemonicError",
     "EnvelopeError",
+    "ExtrinsicBuilder",
+    "ExtrinsicError",
+    "RuntimeInfo",
     "PackageError",
     "PayloadError",
     "RecipientError",

@@ -749,6 +749,7 @@ version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "pynacl" },
+    { name = "scalecodec" },
 ]
 
 [package.optional-dependencies]
@@ -764,6 +765,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
     { name = "robonomics-interface", marker = "extra == 'dev'", specifier = "==2.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.8" },
+    { name = "scalecodec", specifier = ">=1.2.12" },
 ]
 provides-extras = ["dev"]
 
