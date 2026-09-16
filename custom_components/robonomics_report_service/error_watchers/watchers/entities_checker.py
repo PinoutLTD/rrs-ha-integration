@@ -201,7 +201,7 @@ class EntitiesStatusChecker(ErrorWatcher):
         pure_entities: list[str] = data.get("pure_entities", []) or []
 
         number_entities_in_devices = sum(
-            len((v.get("entities") or [])) for v in devices.values()
+            len(v.get("entities") or []) for v in devices.values()
         )
 
         return {

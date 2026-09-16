@@ -174,7 +174,7 @@ class ReportService:
         return create_temp_dir_with_encrypted_files(
             RRS_REPORT_TEMP_DIR,
             files,
-            self.robonomics.sender_account,
+            self.robonomics.sender_keypair,
             [self.problem_service_address],
         )
 

@@ -80,6 +80,33 @@ class Keypair:
         )
 
     @classmethod
+    def create_from_secret(
+        cls,
+        secret: str,
+        ss58_format: int = ROBONOMICS_SS58_FORMAT,
+        crypto_type: int = ED25519,
+    ) -> Keypair:
+        """Accept what a person may paste: a mnemonic or a raw `0x` seed.
+
+        Development URIs such as `//Alice` are refused on purpose. They are
+        well-known keys with well-known secrets, and a client's site must not
+        publish its reports from one.
+        """
+
+        secret = secret.strip()
+        if secret.startswith("//"):
+            raise ValueError(
+                "development URIs like //Alice are not accepted: the key is public"
+            )
+        if secret.startswith("0x"):
+            try:
+                seed = bytes.fromhex(secret[2:])
+            except ValueError as e:
+                raise ValueError("raw seed is not valid hex") from e
+            return cls(seed, ss58_format, crypto_type)
+        return cls.create_from_mnemonic(secret, "", ss58_format, crypto_type)
+
+    @classmethod
     def create_from_public_key(
         cls,
         public_key: bytes,

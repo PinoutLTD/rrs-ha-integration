@@ -4,9 +4,8 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.selector import selector
-from robonomicsinterface import Keypair, KeypairType
-from robonomicsinterface.utils import create_keypair
 
+from .chain import Keypair
 from .const import (
     CONF_NETWORK,
     CONF_PINATA_PUBLIC,
@@ -101,9 +100,8 @@ class ReportServiceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if self._generated_seed is None:
             try:
                 self._generated_seed = Robonomics.generate_seed()
-                generated_kp: Keypair = create_keypair(
-                    cast(str, self._generated_seed),
-                    crypto_type=KeypairType.ED25519,
+                generated_kp = Keypair.create_from_secret(
+                    cast(str, self._generated_seed)
                 )
                 self._generated_address = generated_kp.ss58_address
             except Exception:
@@ -124,10 +122,9 @@ class ReportServiceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         selected_seed = custom_seed or cast(str, self._generated_seed)
 
         try:
-            keypair: Keypair = create_keypair(
-                selected_seed,
-                crypto_type=KeypairType.ED25519,
-            )
+            # Validation only: a seed that cannot produce a keypair would
+            # leave the site unable to publish anything.
+            Keypair.create_from_secret(selected_seed)
         except Exception:
             return self.async_show_form(
                 step_id="seed",

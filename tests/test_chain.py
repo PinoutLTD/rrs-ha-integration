@@ -189,3 +189,22 @@ def test_only_ed25519_accounts_are_accepted() -> None:
             Keypair.create_from_address(
                 ACCOUNTS["recipient"]["account_address"], crypto_type=crypto_type
             )
+
+
+def test_secret_accepts_a_mnemonic_or_a_raw_seed(account) -> None:
+    from_mnemonic = Keypair.create_from_secret(account["mnemonic"])
+    from_raw = Keypair.create_from_secret("0x" + account["mini_secret_hex"])
+
+    assert from_mnemonic.ss58_address == account["account_address"]
+    assert from_raw.ss58_address == account["account_address"]
+
+
+def test_development_uris_are_refused() -> None:
+    # //Alice and friends are public keys; a client's site must not use one.
+    with pytest.raises(ValueError, match="development URIs"):
+        Keypair.create_from_secret("//Alice")
+
+
+def test_broken_raw_seed_is_refused() -> None:
+    with pytest.raises(ValueError, match="hex"):
+        Keypair.create_from_secret("0xnothex")

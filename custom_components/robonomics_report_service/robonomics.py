@@ -7,13 +7,14 @@ from collections.abc import Callable
 
 from homeassistant.core import HomeAssistant
 from robonomicsinterface import Account, Datalog
-from substrateinterface import Keypair, KeypairType
+from substrateinterface import KeypairType
 from substrateinterface.exceptions import (
     ExtrinsicFailedException,
     SubstrateRequestException,
 )
 from tenacity import RetryError, Retrying, stop_after_attempt, wait_fixed
 
+from .chain import Keypair as ChainKeypair
 from .const import NETWORK_WSS
 from .exceptions import RobonomicsError
 from .ipfs import IPFS
@@ -43,6 +44,16 @@ class Robonomics:
             remote_ws=self.current_wss,
         )
         self.sender_address: str = self.sender_account.get_address()
+        # Encryption already runs on the new stack; sending still goes through
+        # robonomics-interface. Both are derived from the same seed, and a
+        # mismatch here would mean reports nobody can open.
+        self.sender_keypair: ChainKeypair = ChainKeypair.create_from_secret(
+            self.sender_seed
+        )
+        if self.sender_keypair.ss58_address != self.sender_address:
+            raise RobonomicsError(
+                "Address derived for encryption does not match the account address"
+            )
 
         self._owner_address = owner_address
 
@@ -53,8 +64,7 @@ class Robonomics:
     @staticmethod
     def generate_seed() -> str:
         """Return mnemonic phrase as seed for account"""
-        seed = Keypair.generate_mnemonic()
-        return seed
+        return ChainKeypair.generate_mnemonic()
 
     async def send_datalog(self, data_to_send: str | dict) -> None:
         """Send datalog, async style"""

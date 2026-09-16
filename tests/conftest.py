@@ -2,8 +2,6 @@ import sys
 from pathlib import Path
 
 import pytest
-from robonomicsinterface import Account
-from substrateinterface import KeypairType
 
 # The `chain` package is plain Python: its tests must run without the whole
 # Home Assistant runtime, so the component directory goes on the path.
@@ -22,14 +20,18 @@ TEMP_DIR_NAME_PREFIX = "dir_for_test"
 
 @pytest.fixture(scope="module", name="sender_account")
 def fixture_sender_account():
-    """Returns sender account with ED25519 type"""
-    return Account(SENDER_SEED, crypto_type=KeypairType.ED25519)
+    """The site's keypair, on the integration's own crypto"""
+    from chain import Keypair
+
+    return Keypair.create_from_secret(SENDER_SEED)
 
 
 @pytest.fixture(scope="module", name="recipient_account")
 def fixture_recipient_account():
-    """Returns recipient account with ED25519 type"""
-    return Account(RECIPIENT_SEED, crypto_type=KeypairType.ED25519)
+    """The integrator's keypair, on the integration's own crypto"""
+    from chain import Keypair
+
+    return Keypair.create_from_secret(RECIPIENT_SEED)
 
 
 @pytest.fixture(scope="module", name="temp_dir_name_prefix")

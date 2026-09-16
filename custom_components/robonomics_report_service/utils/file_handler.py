@@ -6,8 +6,8 @@ from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import homeassistant.util.dt as dt_util
-from robonomicsinterface import Account
 
+from ..chain import Keypair
 from ..const import REPORT_FILE_MAX_BYTES
 from ..exceptions import (
     EncryptedFilesStagingError,
@@ -20,7 +20,7 @@ from .encrypt_tools import multi_envelope_encrypt_data
 def create_temp_dir_with_encrypted_files(
     dir_name_prefix: str,
     file_paths: list[str],
-    sender_account: Account,
+    sender_keypair: Keypair,
     recipient_addresses: list[str],
 ) -> str:
     """
@@ -28,7 +28,7 @@ def create_temp_dir_with_encrypted_files(
 
     :param dir_name_prefix:     Name of the directory to create
     :param file_paths:          List of file paths to copy
-    :param sender_account:      Robonomics account of sender
+    :param sender_keypair:      Robonomics keypair of sender
     :param recipient_addresses: List of addresses to send encrypted files
 
     :return:                    Path to the created directory
@@ -54,7 +54,7 @@ def create_temp_dir_with_encrypted_files(
                 data = data_bytes.decode("utf-8", errors="replace")
 
                 encrypted_data = multi_envelope_encrypt_data(
-                    data, sender_account, list(recipient_addresses), metadata
+                    data, sender_keypair, list(recipient_addresses), metadata
                 )
 
                 # Unique temp file with ecncypted data

@@ -1,12 +1,13 @@
 import pytest
 
 from custom_components.robonomics_report_service.utils.encrypt_tools import (
-    encrypt_msg,
     decrypt_msg,
-    multi_envelope_encrypt_data,
+    encrypt_msg,
     multi_envelope_decrypt_data,
-    parse_decrypted
+    multi_envelope_encrypt_data,
+    parse_decrypted,
 )
+
 
 @pytest.mark.parametrize("msg", [
     b"",
@@ -18,14 +19,14 @@ def test_round_trip_simple_msg(msg, sender_account, recipient_account):
     """Test encryption-decryption cycle for several msgs"""
     encrypted_msg = encrypt_msg(
         msg,
-        sender_account.keypair,
-        recipient_account.keypair.public_key
+        sender_account,
+        recipient_account.public_key
     )
 
     decrypted_msg = decrypt_msg(
         encrypted_msg,
-        sender_account.keypair.public_key,
-        recipient_account.keypair
+        sender_account.public_key,
+        recipient_account
     )
 
     expected_msg = msg.encode("utf-8") if isinstance(msg, str) else msg
@@ -40,7 +41,7 @@ def test_round_trip_simple_msg(msg, sender_account, recipient_account):
 def test_round_trip_multi_envelope(data, sender_account, recipient_account):
     """Test encryption-decryption cycle for several msgs"""
 
-    recipient_addresses = [recipient_account.get_address()]
+    recipient_addresses = [recipient_account.ss58_address]
 
     encrypted_data = multi_envelope_encrypt_data(
         data,
@@ -51,13 +52,13 @@ def test_round_trip_multi_envelope(data, sender_account, recipient_account):
     decrypted_data_recipient = multi_envelope_decrypt_data(
         encrypted_data,
         recipient_account,
-        sender_account.get_address()
+        sender_account.ss58_address
     )
 
     decrypted_data_sender = multi_envelope_decrypt_data(
         encrypted_data,
         sender_account,
-        sender_account.get_address()
+        sender_account.ss58_address
     )
 
     assert decrypted_data_recipient == decrypted_data_sender == data
@@ -72,7 +73,7 @@ def test_round_trip_multi_envelope_with_metadata(
         "file_name": "test.txt"
     }
 
-    recipient_addresses = [recipient_account.get_address()]
+    recipient_addresses = [recipient_account.ss58_address]
 
     encrypted_data = multi_envelope_encrypt_data(
         payload,
@@ -84,7 +85,7 @@ def test_round_trip_multi_envelope_with_metadata(
     decrypted_data = multi_envelope_decrypt_data(
         encrypted_data,
         recipient_account,
-        sender_account.get_address()
+        sender_account.ss58_address
     )
 
     decrypted_payload, decrypted_meta = parse_decrypted(decrypted_data)

@@ -3,9 +3,10 @@ from pathlib import Path
 from typing import cast
 from zipfile import ZipFile
 
-from robonomicsinterface import Account
+from chain import Keypair
 
 from custom_components.robonomics_report_service.utils import file_handler
+
 
 def test_create_temp_dir_with_encrypted_files(
         tmp_path,
@@ -28,7 +29,7 @@ def test_create_temp_dir_with_encrypted_files(
         lambda *args, **kwargs: "ENCRYPTED"
     )
 
-    sender_account = cast(Account, object())
+    sender_account = cast(Keypair, object())
 
     test_files = []
     for i in range(1, 6):
