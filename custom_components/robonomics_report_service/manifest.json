@@ -2,13 +2,19 @@
   "domain": "robonomics_report_service",
   "name": "Robonomics Report Service",
   "config_flow": true,
-  "codeowners": ["@pinoutcloud"],
+  "codeowners": [
+    "@pinoutcloud"
+  ],
   "version": "1.0.0",
-  "dependencies": ["system_log", "recorder"],
+  "dependencies": [
+    "system_log",
+    "recorder"
+  ],
   "requirements": [
-    "robonomics-interface==2.0.0",
-    "pinatapy-vourhey==0.1.9",
-    "tenacity==8.5.0"
+    "pynacl>=1.6.2",
+    "scalecodec>=1.2.12",
+    "xxhash>=3.5.0",
+    "pinatapy-vourhey==0.1.9"
   ],
   "documentation": "https://wiki.robonomics.network/",
   "issue_tracker": "https://github.com/PinoutLTD/rrs-ha-integration/issues",

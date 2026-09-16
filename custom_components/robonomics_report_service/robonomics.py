@@ -1,25 +1,27 @@
 import asyncio
 import json
 import logging
-import time
 from collections import deque
-from collections.abc import Callable
 
 from homeassistant.core import HomeAssistant
-from robonomicsinterface import Account, Datalog
-from substrateinterface import KeypairType
-from substrateinterface.exceptions import (
-    ExtrinsicFailedException,
-    SubstrateRequestException,
-)
-from tenacity import RetryError, Retrying, stop_after_attempt, wait_fixed
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .chain import Keypair as ChainKeypair
+from .chain import Keypair
+from .chain.client import (
+    ChainError,
+    ExtrinsicFailedError,
+    RobonomicsClient,
+    RpcError,
+)
 from .const import NETWORK_WSS
 from .exceptions import RobonomicsError
 from .ipfs import IPFS
 
 _LOGGER = logging.getLogger(__name__)
+
+# Only transport trouble is worth another endpoint; a call the chain itself
+# rejected will be rejected again.
+RETRYABLE_ERRORS = (RpcError, ChainError, TimeoutError, OSError)
 
 
 class Robonomics:
@@ -38,24 +40,12 @@ class Robonomics:
         self.sender_seed: str = sender_seed
         self.wss_endpoints: list[str] = NETWORK_WSS[network]
         self.current_wss: str = self.wss_endpoints[0]
-        self.sender_account: Account = Account(
-            self.sender_seed,
-            crypto_type=KeypairType.ED25519,
-            remote_ws=self.current_wss,
-        )
-        self.sender_address: str = self.sender_account.get_address()
-        # Encryption already runs on the new stack; sending still goes through
-        # robonomics-interface. Both are derived from the same seed, and a
-        # mismatch here would mean reports nobody can open.
-        self.sender_keypair: ChainKeypair = ChainKeypair.create_from_secret(
-            self.sender_seed
-        )
-        if self.sender_keypair.ss58_address != self.sender_address:
-            raise RobonomicsError(
-                "Address derived for encryption does not match the account address"
-            )
+
+        self.sender_keypair: Keypair = Keypair.create_from_secret(sender_seed)
+        self.sender_address: str = self.sender_keypair.ss58_address
 
         self._owner_address = owner_address
+        self._clients: dict[str, RobonomicsClient] = {}
 
         self._datalog_queue = deque()
         self._worker_task: asyncio.Task | None = None
@@ -64,7 +54,7 @@ class Robonomics:
     @staticmethod
     def generate_seed() -> str:
         """Return mnemonic phrase as seed for account"""
-        return ChainKeypair.generate_mnemonic()
+        return Keypair.generate_mnemonic()
 
     async def send_datalog(self, data_to_send: str | dict) -> None:
         """Send datalog, async style"""
@@ -72,68 +62,14 @@ class Robonomics:
             data_to_send = json.dumps(data_to_send)
         await self._handle_datalog_request(data_to_send)
 
-    @staticmethod
-    def _retry_decorator(func: Callable):
-        def wrapper(self, *args, **kwargs):
-            last_exc: Exception | None = None
-            attempts = len(self.wss_endpoints)
+    def _client(self) -> RobonomicsClient:
+        """One client per endpoint, so parsed metadata is reused."""
 
-            try:
-                for attempt in Retrying(
-                    wait=wait_fixed(2),
-                    stop=stop_after_attempt(attempts),
-                    reraise=False,
-                ):
-                    with attempt:
-                        try:
-                            return func(self, *args, **kwargs)
-
-                        except TimeoutError as e:
-                            last_exc = e
-                            self.change_current_wss()
-                            raise
-
-                        except SubstrateRequestException as e:
-                            last_exc = e
-                            code = self._substrate_code(e)
-
-                            if code == 1014:
-                                time.sleep(8)
-                                self.change_current_wss()
-                                raise
-
-                            self.change_current_wss()
-                            raise
-
-                        except ExtrinsicFailedException as e:
-                            last_exc = e
-                            break
-
-                        except Exception as e:
-                            last_exc = e
-                            self.change_current_wss()
-                            raise
-            except RetryError as e:
-                if e.last_attempt is not None and e.last_attempt.failed:
-                    exc = e.last_attempt.exception()
-                    if isinstance(exc, Exception):
-                        last_exc = exc
-                if last_exc is None:
-                    last_exc = e
-
-            if last_exc is None:
-                raise RobonomicsError("Failed to send datalog")
-
-            code = self._substrate_code(last_exc)
-            reason = self._exc_short(last_exc)
-
-            msg = f"Failed to send datalog ({reason})"
-            if code:
-                msg = f"Failed to send datalog (code={code}, {reason})"
-
-            raise RobonomicsError(msg) from last_exc
-
-        return wrapper
+        if self.current_wss not in self._clients:
+            self._clients[self.current_wss] = RobonomicsClient(
+                async_get_clientsession(self.hass), self.current_wss
+            )
+        return self._clients[self.current_wss]
 
     async def _handle_datalog_request(self, data_to_send: str) -> None:
         self._datalog_queue.append(data_to_send)
@@ -149,7 +85,7 @@ class Robonomics:
                 data_to_send = self._datalog_queue.popleft()
 
                 try:
-                    await asyncio.to_thread(self._send_datalog, data_to_send)
+                    await self._send_datalog(data_to_send)
                 except RobonomicsError as e:
                     _LOGGER.warning(
                         "Datalog send failed "
@@ -183,47 +119,48 @@ class Robonomics:
                         self._datalog_worker()
                     )
 
-    @_retry_decorator
-    def _send_datalog(self, data_to_send: str) -> bool:
-        # If no owner address is provided, use RWS of sender
-        datalog = Datalog(
-            self.sender_account,
-            rws_sub_owner=self._owner_address or self.sender_address,
-        )
+    async def _send_datalog(self, data_to_send: str) -> str:
+        """Publish one record, trying each endpoint before giving up."""
 
-        datalog.record(data_to_send)
+        last_error: Exception | None = None
 
-        return True
+        for _ in range(len(self.wss_endpoints)):
+            try:
+                block_hash = await self._client().record_datalog(
+                    self.sender_keypair,
+                    data_to_send,
+                    # Without an owner the site publishes on its own subscription.
+                    self._owner_address or self.sender_address,
+                )
+            except ExtrinsicFailedError as e:
+                # The chain accepted the extrinsic and refused the call: a
+                # missing or expired subscription looks exactly like this.
+                raise RobonomicsError(f"Failed to send datalog ({e})") from e
+            except RETRYABLE_ERRORS as e:
+                _LOGGER.debug("Datalog attempt on %s failed: %s", self.current_wss, e)
+                last_error = e
+                self.change_current_wss()
+                continue
+
+            _LOGGER.debug("Datalog is recorded in block %s", block_hash)
+            return block_hash
+
+        raise RobonomicsError(
+            f"Failed to send datalog ({self._exc_short(last_error)})"
+        ) from last_error
 
     def change_current_wss(self) -> None:
         """Set next current wss"""
 
         current_index = self.wss_endpoints.index(self.current_wss)
-        if current_index == (len(self.wss_endpoints) - 1):
-            next_index = 0
-        else:
-            next_index = current_index + 1
+        next_index = (current_index + 1) % len(self.wss_endpoints)
         self.current_wss = self.wss_endpoints[next_index]
         _LOGGER.debug("New Robonomics ws is %s", self.current_wss)
-        self.sender_account: Account = Account(
-            seed=self.sender_seed,
-            crypto_type=KeypairType.ED25519,
-            remote_ws=self.current_wss,
-        )
 
     @staticmethod
-    def _exc_short(e: BaseException) -> str:
+    def _exc_short(e: BaseException | None) -> str:
+        if e is None:
+            return "no endpoint answered"
         name = e.__class__.__name__
         msg = str(e).strip()
         return f"{name}: {msg}" if msg else name
-
-    @staticmethod
-    def _substrate_code(e: BaseException) -> str | None:
-        if (
-            isinstance(e, SubstrateRequestException)
-            and e.args
-            and isinstance(e.args[0], dict)
-        ):
-            code = e.args[0].get("code")
-            return str(code) if code is not None else None
-        return None

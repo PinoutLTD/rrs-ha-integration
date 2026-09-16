@@ -78,6 +78,18 @@ class ExtrinsicBuilder:
         if version != SUPPORTED_EXTRINSIC_VERSION:
             raise ExtrinsicError(f"extrinsic version {version} is not supported")
 
+    def storage_value_type(self, pallet: str, item: str) -> str:
+        """The type a storage item decodes into, as the metadata describes it.
+
+        Taking it from the metadata rather than from a preset keeps event
+        decoding working across runtime upgrades.
+        """
+
+        storage = self.metadata.get_metadata_pallet(pallet).get_storage_function(item)
+        if storage is None:
+            raise ExtrinsicError(f"{pallet}.{item} is not in the metadata")
+        return storage.get_value_type_string()
+
     def compose_call(self, module: str, function: str, args: dict):
         call = self.config.create_scale_object("Call", metadata=self.metadata)
         call.encode(
