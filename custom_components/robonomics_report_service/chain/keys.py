@@ -21,15 +21,50 @@ ROBONOMICS_SS58_FORMAT = 32
 NONCE_BYTES = 24
 SEED_BYTES = 32
 
+# Substrate's MultiSignature/MultiSigner ordering, used both as the value of
+# `crypto_type` and as the signature tag inside an extrinsic.
+ED25519 = 0
+SR25519 = 1
+ECDSA = 2
+SUPPORTED_CRYPTO_TYPES = (ED25519,)
+
+
+class UnsupportedCryptoTypeError(ValueError):
+    """Raised for a key type the report format cannot use.
+
+    Report encryption converts ed25519 keys to curve25519 on both sides, so
+    every account in the chain — the site and the integrator who receives the
+    reports — must be ED25519. This is not new: substrate-interface refused
+    anything else as well ("Only ed25519 keypair type supported"). Signing
+    extrinsics with SR25519 would be possible (py-sr25519-bindings does ship
+    aarch64 and musl wheels), but the envelope format would have to change
+    first, so the restriction is stated here rather than assumed.
+    """
+
+
+def check_crypto_type(crypto_type: int) -> None:
+    if crypto_type not in SUPPORTED_CRYPTO_TYPES:
+        raise UnsupportedCryptoTypeError(
+            f"crypto type {crypto_type} is not supported: report encryption "
+            "requires ED25519 accounts on both sides"
+        )
+
 
 class Keypair:
     """An ED25519 account: the seed stays in memory and never leaves it."""
 
-    def __init__(self, seed: bytes, ss58_format: int = ROBONOMICS_SS58_FORMAT) -> None:
+    def __init__(
+        self,
+        seed: bytes,
+        ss58_format: int = ROBONOMICS_SS58_FORMAT,
+        crypto_type: int = ED25519,
+    ) -> None:
+        check_crypto_type(crypto_type)
         if len(seed) != SEED_BYTES:
             raise ValueError(f"seed must be {SEED_BYTES} bytes")
         self._signing_key = nacl.signing.SigningKey(seed)
         self.ss58_format = ss58_format
+        self.crypto_type = crypto_type
         self.public_key = bytes(self._signing_key.verify_key)
 
     @classmethod
@@ -38,26 +73,47 @@ class Keypair:
         mnemonic: str,
         password: str = "",
         ss58_format: int = ROBONOMICS_SS58_FORMAT,
+        crypto_type: int = ED25519,
     ) -> Keypair:
-        return cls(mnemonic_to_mini_secret(mnemonic, password), ss58_format)
+        return cls(
+            mnemonic_to_mini_secret(mnemonic, password), ss58_format, crypto_type
+        )
 
     @classmethod
     def create_from_public_key(
-        cls, public_key: bytes, ss58_format: int = ROBONOMICS_SS58_FORMAT
+        cls,
+        public_key: bytes,
+        ss58_format: int = ROBONOMICS_SS58_FORMAT,
+        crypto_type: int = ED25519,
     ) -> Keypair:
         """A counterparty: enough to verify and to encrypt, not to sign."""
 
+        check_crypto_type(crypto_type)
         keypair = cls.__new__(cls)
         keypair._signing_key = None
         keypair.ss58_format = ss58_format
+        keypair.crypto_type = crypto_type
         keypair.public_key = public_key
         return keypair
 
     @classmethod
     def create_from_address(
-        cls, address: str, ss58_format: int = ROBONOMICS_SS58_FORMAT
+        cls,
+        address: str,
+        ss58_format: int = ROBONOMICS_SS58_FORMAT,
+        crypto_type: int = ED25519,
     ) -> Keypair:
-        return cls.create_from_public_key(ss58_decode(address), ss58_format)
+        """Build from an address.
+
+        An SS58 address carries no key type, so an SR25519 account cannot be
+        told apart here: it will fail later, when its reports cannot be
+        decrypted. Sites are set up by us, which is why the ED25519 rule is
+        written down in the README rather than enforced at this point.
+        """
+
+        return cls.create_from_public_key(
+            ss58_decode(address), ss58_format, crypto_type
+        )
 
     @staticmethod
     def generate_mnemonic(word_count: int = 12) -> str:

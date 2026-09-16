@@ -14,6 +14,12 @@ The information collected by watchers is placed in a JSON issue and, along with 
 ## Requirements
 
 - Home Assistant 2026.3.1 or newer
+- **ED25519 accounts on both sides.** Reports are encrypted by converting
+  ed25519 keys to curve25519, so both the site's own account and the
+  integrator's address that receives the reports must be ED25519. An SR25519
+  account cannot encrypt a report or read one. An SS58 address does not reveal
+  its key type, so this cannot be checked when the address is entered: it is a
+  setup rule, and the failure would only surface as an unreadable report.
 
 ## Installation
 

@@ -11,7 +11,11 @@ from pathlib import Path
 
 import pytest
 from chain import (
+    ECDSA,
+    ED25519,
+    SR25519,
     Keypair,
+    UnsupportedCryptoTypeError,
     generate_mnemonic,
     mnemonic_to_mini_secret,
     ss58_decode,
@@ -166,3 +170,22 @@ def test_the_new_code_reads_what_the_previous_stack_writes() -> None:
         recipient.decrypt_message(encrypted, old_sender.public_key).decode()
         == "old report"
     )
+
+
+def test_only_ed25519_accounts_are_accepted() -> None:
+    """The envelope format converts ed25519 keys to curve25519 on both sides.
+
+    substrate-interface refused anything else too; the difference is that the
+    rule is now stated instead of assumed.
+    """
+
+    mnemonic = ACCOUNTS["sender"]["mnemonic"]
+
+    assert Keypair.create_from_mnemonic(mnemonic).crypto_type == ED25519
+    for crypto_type in (SR25519, ECDSA):
+        with pytest.raises(UnsupportedCryptoTypeError, match="ED25519"):
+            Keypair.create_from_mnemonic(mnemonic, crypto_type=crypto_type)
+        with pytest.raises(UnsupportedCryptoTypeError, match="ED25519"):
+            Keypair.create_from_address(
+                ACCOUNTS["recipient"]["account_address"], crypto_type=crypto_type
+            )
