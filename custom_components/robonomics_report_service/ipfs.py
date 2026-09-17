@@ -3,7 +3,9 @@ import os
 from dataclasses import dataclass
 from typing import cast
 
+import aiohttp
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from pinatapy import PinataPy
 
 from .const import CONF_PINATA_PUBLIC, CONF_PINATA_SECRET, CREDS_STORAGE_KEY
@@ -11,6 +13,31 @@ from .exceptions import IPFSError, PinataKeysRevokedError, StorageError
 from .utils.ha_storage import async_load_from_store
 
 IpfsHashes = dict[str, str]
+
+PINATA_TEST_AUTHENTICATION_URL = "https://api.pinata.cloud/data/testAuthentication"
+
+
+async def async_check_pinata_keys(hass: HomeAssistant, public: str, secret: str) -> str | None:
+    """Ask Pinata whether the key pair is valid; returns an error key or None.
+
+    This uploads nothing. It catches a mistyped or revoked key and a JWT pasted
+    as the secret; a valid key that lacks the pinning scope still passes, and
+    that case is reported, with Pinata's own message, by the first upload.
+    """
+
+    try:
+        async with async_get_clientsession(hass).get(
+            PINATA_TEST_AUTHENTICATION_URL,
+            headers={"pinata_api_key": public, "pinata_secret_api_key": secret},
+            timeout=aiohttp.ClientTimeout(total=15),
+        ) as response:
+            if response.status == 200:
+                return None
+            if response.status in (401, 403):
+                return "invalid_pinata_keys"
+            return "pinata_unavailable"
+    except (aiohttp.ClientError, TimeoutError):
+        return "pinata_unavailable"
 
 
 @dataclass(frozen=True)
@@ -42,13 +69,9 @@ class IPFS:
     async def pin_file_to_pinata(self, file_path: str) -> str:
         """Upload and pin one file to Pinata and get its hash"""
         pinata = await self._get_pinata_with_creds()
-        return await self.hass.async_add_executor_job(
-            self._pin_file_to_pinata, file_path, pinata
-        )
+        return await self.hass.async_add_executor_job(self._pin_file_to_pinata, file_path, pinata)
 
-    async def unpin_files_from_pinata(
-        self, payload: str | IpfsHashes
-    ) -> UnpinResult:
+    async def unpin_files_from_pinata(self, payload: str | IpfsHashes) -> UnpinResult:
         """Unpin IPFS file from Pinata"""
 
         try:
@@ -67,9 +90,7 @@ class IPFS:
 
     async def _get_pinata_with_creds(self) -> PinataPy:
         try:
-            storage_data = await async_load_from_store(
-                self.hass, CREDS_STORAGE_KEY
-            )
+            storage_data = await async_load_from_store(self.hass, CREDS_STORAGE_KEY)
         except StorageError as e:
             raise IPFSError("Failed to load Pinata credentials") from e
 
@@ -81,39 +102,27 @@ class IPFS:
 
         return PinataPy(pub, sec)
 
-    def _pin_files_from_dir_to_pinata(
-        self, dir_name: str, pinata: PinataPy
-    ) -> IpfsHashes:
+    def _pin_files_from_dir_to_pinata(self, dir_name: str, pinata: PinataPy) -> IpfsHashes:
 
         dict_with_hashes: IpfsHashes = {}
 
         try:
             file_names = [
-                f
-                for f in os.listdir(dir_name)
-                if os.path.isfile(os.path.join(dir_name, f))
+                f for f in os.listdir(dir_name) if os.path.isfile(os.path.join(dir_name, f))
             ]
         except OSError as e:
-            raise IPFSError(
-                f"Cannot list directory for pinning: {dir_name}"
-            ) from e
+            raise IPFSError(f"Cannot list directory for pinning: {dir_name}") from e
 
         for file in file_names:
             path_to_file = os.path.join(dir_name, file)
 
             try:
-                res = pinata.pin_file_to_ipfs(
-                    path_to_file, save_absolute_paths=False
-                )
+                res = pinata.pin_file_to_ipfs(path_to_file, save_absolute_paths=False)
             except Exception as e:
-                raise IPFSError(
-                    f"Pinata pin_file_to_ipfs failed for file: {file}"
-                ) from e
+                raise IPFSError(f"Pinata pin_file_to_ipfs failed for file: {file}") from e
 
             if not isinstance(res, dict):
-                raise IPFSError(
-                    f"Pinata returned unexpected response for file: {file}"
-                )
+                raise IPFSError(f"Pinata returned unexpected response for file: {file}")
 
             ipfs_hash = res.get("IpfsHash")
 
@@ -124,11 +133,7 @@ class IPFS:
             status = res.get("status")
             text = res.get("text", "")
 
-            if (
-                status == 403
-                and isinstance(text, str)
-                and "API_KEY_REVOKED" in text
-            ):
+            if status == 403 and isinstance(text, str) and "API_KEY_REVOKED" in text:
                 raise PinataKeysRevokedError("Pinata API key was revoked")
 
             raise IPFSError(f"Pinata did not return IpfsHash for file: {file}")
@@ -141,16 +146,12 @@ class IPFS:
     def _pin_file_to_pinata(self, file_path: str, pinata: PinataPy) -> str:
 
         if not os.path.isfile(file_path):
-            raise IPFSError(
-                f"File for uploading to Pinata not found: {file_path}"
-            )
+            raise IPFSError(f"File for uploading to Pinata not found: {file_path}")
 
         try:
             res = pinata.pin_file_to_ipfs(file_path, save_absolute_paths=False)
         except Exception as e:
-            raise IPFSError(
-                f"Pinata pin_file_to_ipfs failed for: {file_path}"
-            ) from e
+            raise IPFSError(f"Pinata pin_file_to_ipfs failed for: {file_path}") from e
 
         if not isinstance(res, dict):
             raise IPFSError("Pinata returned unexpected response type")
@@ -163,11 +164,7 @@ class IPFS:
         status = res.get("status")
         text = res.get("text", "")
 
-        if (
-            status == 403
-            and isinstance(text, str)
-            and "API_KEY_REVOKED" in text
-        ):
+        if status == 403 and isinstance(text, str) and "API_KEY_REVOKED" in text:
             raise PinataKeysRevokedError("Pinata API key was revoked")
 
         # Say what Pinata answered: a key without the pinning scope and a
@@ -178,9 +175,7 @@ class IPFS:
             detail += f", response={text[:300]}"
         raise IPFSError(f"Pinata did not return IpfsHash ({detail})")
 
-    def _normalize_unpin_payload(
-        self, payload: str | IpfsHashes
-    ) -> IpfsHashes | None:
+    def _normalize_unpin_payload(self, payload: str | IpfsHashes) -> IpfsHashes | None:
         # If IPFS hashes provided in dict
         if isinstance(payload, dict):
             return self._normalize_hash_dict(payload)

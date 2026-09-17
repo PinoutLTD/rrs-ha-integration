@@ -20,15 +20,30 @@
         "data": {
           "sender_seed": "(Optional) Custom mnemonic seed"
         }
+      },
+      "reconfigure": {
+        "title": "Robonomics Report Service",
+        "description": "Change Pinata keys and addresses. The seed and the site's Robonomics address stay as they are. The Pinata secret has to be entered again.",
+        "data": {
+          "problem_service_robonomics_address": "Robonomics address of integrator problem service",
+          "pinata_public": "Pinata public key",
+          "pinata_secret": "Pinata secret key",
+          "sender_email": "(Optional) E-mail for receiving solutions to problem reports",
+          "subscription_owner_robonomics_address": "(Optional) Robonomics address of subscription owner"
+        }
       }
     },
     "error": {
       "seed_generation_failed": "Failed to generate mnemonic seed",
       "invalid_seed": "Invalid mnemonic seed",
-      "storage_save_failed": "Failed to save integration credentials"
+      "storage_save_failed": "Failed to save integration credentials",
+      "invalid_pinata_keys": "Pinata rejected these keys: check the API key and the API secret (not the JWT)",
+      "pinata_unavailable": "Could not reach Pinata to check the keys, try again",
+      "invalid_address": "Not a valid Robonomics address"
     },
     "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_service%]"
+      "already_configured": "[%key:common::config_flow::abort::already_configured_service%]",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
     }
   }
 }
