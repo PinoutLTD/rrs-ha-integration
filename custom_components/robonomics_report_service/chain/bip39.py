@@ -11,7 +11,6 @@ come from the previous implementation.
 import hashlib
 import secrets
 import unicodedata
-from functools import lru_cache
 from pathlib import Path
 
 WORDLIST_FILE = Path(__file__).with_name("english.txt")
@@ -28,8 +27,7 @@ class MnemonicError(ValueError):
     pass
 
 
-@lru_cache(maxsize=1)
-def load_wordlist() -> tuple[str, ...]:
+def _read_wordlist() -> tuple[str, ...]:
     data = WORDLIST_FILE.read_bytes()
     if hashlib.sha256(data).hexdigest() != WORDLIST_SHA256:
         raise MnemonicError("BIP39 wordlist does not match its known checksum")
@@ -37,6 +35,16 @@ def load_wordlist() -> tuple[str, ...]:
     if len(words) != WORDLIST_SIZE:
         raise MnemonicError(f"BIP39 wordlist has {len(words)} words, expected 2048")
     return words
+
+
+# Read once, at import. Home Assistant imports integrations off the event
+# loop, whereas the first mnemonic is generated inside a config flow step:
+# reading the file lazily there is blocking I/O in the loop, which HA flags.
+WORDLIST = _read_wordlist()
+
+
+def load_wordlist() -> tuple[str, ...]:
+    return WORDLIST
 
 
 def normalize(text: str) -> str:

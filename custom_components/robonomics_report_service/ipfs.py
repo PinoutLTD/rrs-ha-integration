@@ -170,7 +170,13 @@ class IPFS:
         ):
             raise PinataKeysRevokedError("Pinata API key was revoked")
 
-        raise IPFSError("Pinata did not return IpfsHash")
+        # Say what Pinata answered: a key without the pinning scope and a
+        # JWT pasted as the secret both end up here, and look identical
+        # without the status and message.
+        detail = f"status={status}" if status is not None else "no status"
+        if isinstance(text, str) and text:
+            detail += f", response={text[:300]}"
+        raise IPFSError(f"Pinata did not return IpfsHash ({detail})")
 
     def _normalize_unpin_payload(
         self, payload: str | IpfsHashes
