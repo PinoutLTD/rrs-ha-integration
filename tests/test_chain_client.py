@@ -153,9 +153,7 @@ def failure(index: int) -> dict:
         "extrinsic_idx": index,
         "module_id": "System",
         "event_id": "ExtrinsicFailed",
-        "attributes": {
-            "dispatch_error": {"Module": {"index": 55, "error": "0x02000000"}}
-        },
+        "attributes": {"dispatch_error": {"Module": {"index": 55, "error": "0x02000000"}}},
     }
 
 
@@ -176,6 +174,58 @@ def test_another_extrinsic_failing_is_not_ours() -> None:
 
 def test_missing_result_is_not_taken_for_success() -> None:
     # Inclusion alone is not a result; saying nothing would be worse.
-    assert extrinsic_failure([success(0)], 1) == (
-        "the block holds no result for this extrinsic"
+    assert extrinsic_failure([success(0)], 1) == ("the block holds no result for this extrinsic")
+
+
+# Validity, as the transaction pool sees it
+
+
+def test_valid_transaction_has_no_reason() -> None:
+    from chain.client import transaction_invalidity
+
+    assert transaction_invalidity(bytes.fromhex("00" + "00" * 8)) is None
+
+
+def test_account_without_balance_is_explained() -> None:
+    """Observed live on 2026-09-17: a zero-balance device is rejected as Payment."""
+
+    from chain.client import transaction_invalidity
+
+    reason = transaction_invalidity(bytes([1, 0, 1]))
+
+    assert reason.startswith("Payment")
+    assert "existential deposit" in reason
+
+
+@pytest.mark.parametrize(
+    ("raw", "start"),
+    [
+        (bytes([1, 0, 3]), "Stale"),
+        (bytes([1, 0, 4]), "BadProof"),
+        (bytes([1, 0, 7, 42]), "Custom(42)"),
+        (bytes([1, 1, 0]), "Unknown(0)"),
+    ],
+)
+def test_other_invalidities_are_named(raw: bytes, start: str) -> None:
+    from chain.client import transaction_invalidity
+
+    assert transaction_invalidity(raw).startswith(start)
+
+
+@pytest.mark.asyncio
+async def test_node_error_data_is_kept() -> None:
+    rpc, _ = await open_rpc(
+        [
+            {
+                "id": "LAST",
+                "error": {
+                    "code": 1010,
+                    "message": "Invalid Transaction",
+                    "data": "Inability to pay some fees",
+                },
+            }
+        ]
     )
+
+    with pytest.raises(RpcError, match="Invalid Transaction: Inability to pay"):
+        await rpc.request("author_submitAndWatchExtrinsic", ["0x00"])

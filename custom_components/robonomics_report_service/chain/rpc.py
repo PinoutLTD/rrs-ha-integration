@@ -83,15 +83,17 @@ class RobonomicsRpc:
                 continue
             if "error" in message:
                 error = message["error"]
-                raise RpcError(error.get("message", "unknown error"), error.get("code"))
+                text = error.get("message", "unknown error")
+                # "Invalid Transaction" alone says nothing; the reason is in data.
+                if error.get("data"):
+                    text = f"{text}: {error['data']}"
+                raise RpcError(text, error.get("code"))
             return message.get("result")
 
     async def submit_and_watch(self, extrinsic_hex: str) -> str:
         """Submit an extrinsic and return the hash of the block holding it."""
 
-        subscription = await self.request(
-            "author_submitAndWatchExtrinsic", [extrinsic_hex]
-        )
+        subscription = await self.request("author_submitAndWatchExtrinsic", [extrinsic_hex])
 
         try:
             while True:

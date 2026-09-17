@@ -17,6 +17,10 @@ The information collected by watchers is placed in a JSON issue and, along with 
 - Runs on ARM without a compiler: every dependency ships wheels for `aarch64`,
   both glibc and musl, so a Raspberry Pi or a Home Assistant Green installs the
   same way an x86 box does
+- **The site's account must exist on chain.** Publishing through an RWS
+  subscription costs nothing, but Robonomics refuses any transaction from an
+  account with a zero balance (`InvalidTransaction::Payment`). Send the site's
+  address the existential deposit — 0.000001 XRT — once; it is never spent.
 - **ED25519 accounts on both sides.** Reports are encrypted by converting
   ed25519 keys to curve25519, so both the site's own account and the
   integrator's address that receives the reports must be ED25519. An SR25519
