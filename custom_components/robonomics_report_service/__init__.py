@@ -1,8 +1,10 @@
 import logging
+from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.loader import async_get_integration
 
 from .const import (
     CONF_NETWORK,
@@ -10,6 +12,9 @@ from .const import (
     CREDS_STORAGE_KEY,
     DOMAIN,
     ERROR_WATCHERS_MANAGER,
+    HEARTBEAT,
+    HEARTBEAT_INTERVAL,
+    HEARTBEAT_STARTUP_DELAY,
     LOGS_BACKUP_PATH,
     LOGS_PATH,
     OWNER_ADDRESS,
@@ -18,6 +23,7 @@ from .const import (
 )
 from .error_watchers.error_watchers_manager import ErrorWatchersManager
 from .exceptions import StorageError
+from .heartbeat import Heartbeat
 from .ipfs import IPFS
 from .report_service import ReportService
 from .robonomics import Robonomics
@@ -89,6 +95,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN, PROBLEM_REPORT_SERVICE, _handle_send_report
     )
 
+    # Say "the site is alive" once a day, so that silence means something.
+    integration = await async_get_integration(hass, DOMAIN)
+    heartbeat = Heartbeat(
+        hass,
+        robonomics,
+        str(integration.version),
+        timedelta(minutes=HEARTBEAT_INTERVAL),
+        timedelta(minutes=HEARTBEAT_STARTUP_DELAY),
+    )
+    heartbeat.start()
+    hass.data[DOMAIN][entry.entry_id][HEARTBEAT] = heartbeat
+
     # Configure and start manager for errors watchers
     error_watchers_manager = ErrorWatchersManager(hass)
     error_watchers_manager.setup_watchers()
@@ -113,6 +131,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     Unload a config entry.
     """
     data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
+
+    heartbeat = data.get(HEARTBEAT)
+
+    if heartbeat:
+        heartbeat.stop()
 
     error_watchers_manager = data.get(ERROR_WATCHERS_MANAGER)
 

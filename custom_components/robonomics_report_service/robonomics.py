@@ -56,11 +56,19 @@ class Robonomics:
         """Return mnemonic phrase as seed for account"""
         return Keypair.generate_mnemonic()
 
-    async def send_datalog(self, data_to_send: str | dict) -> None:
-        """Send datalog, async style"""
+    async def send_datalog(
+        self, data_to_send: str | dict, cleanup_pinata: bool = True
+    ) -> None:
+        """Send datalog, async style.
+
+        `cleanup_pinata` says whether the payload points at files on Pinata
+        that should be unpinned if the record cannot be published. A report
+        does; a heartbeat carries its own JSON and has nothing to clean up.
+        """
+
         if isinstance(data_to_send, dict):
-            data_to_send = json.dumps(data_to_send)
-        await self._handle_datalog_request(data_to_send)
+            data_to_send = json.dumps(data_to_send, separators=(",", ":"))
+        await self._handle_datalog_request(data_to_send, cleanup_pinata)
 
     def _client(self) -> RobonomicsClient:
         """One client per endpoint, so parsed metadata is reused."""
@@ -71,8 +79,10 @@ class Robonomics:
             )
         return self._clients[self.current_wss]
 
-    async def _handle_datalog_request(self, data_to_send: str) -> None:
-        self._datalog_queue.append(data_to_send)
+    async def _handle_datalog_request(
+        self, data_to_send: str, cleanup_pinata: bool = True
+    ) -> None:
+        self._datalog_queue.append((data_to_send, cleanup_pinata))
         async with self._queue_lock:
             if self._worker_task is None or self._worker_task.done():
                 self._worker_task = self.hass.async_create_task(
@@ -82,7 +92,7 @@ class Robonomics:
     async def _datalog_worker(self) -> None:
         try:
             while self._datalog_queue:
-                data_to_send = self._datalog_queue.popleft()
+                data_to_send, cleanup_pinata = self._datalog_queue.popleft()
 
                 try:
                     await self._send_datalog(data_to_send)
@@ -92,6 +102,8 @@ class Robonomics:
                         "(will drop payload from queue): %s",
                         e,
                     )
+                    if not cleanup_pinata:
+                        continue
                     try:
                         result = await self.ipfs.unpin_files_from_pinata(
                             data_to_send

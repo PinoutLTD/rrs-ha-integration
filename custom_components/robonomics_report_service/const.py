@@ -4,6 +4,10 @@ ERROR_WATCHERS_MANAGER = "error_watchers_manager"
 
 CREDS_STORAGE_KEY = "creds_storage"
 
+HEARTBEAT = "heartbeat"
+HEARTBEAT_INTERVAL = 24 * 60  # Mins
+HEARTBEAT_STARTUP_DELAY = 5  # Mins
+
 CONF_PINATA_SECRET = "pinata_secret"
 CONF_PINATA_PUBLIC = "pinata_public"
 CONF_SENDER_SEED = "sender_seed"

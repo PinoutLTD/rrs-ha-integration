@@ -9,6 +9,26 @@ The integration creates error watchers that monitor Home Assistant for various i
 - `LoggerHandler` — collects all logs with `critical`, `error`, and `warning` levels (in raw and accumulated style)
 - `EntitiesStatusChecker` — collects information about entities with the `STATE_UNAVAILABLE` status
 
+### Heartbeat
+
+Reports are sent only when something is wrong, so a silent site is ambiguous: it looks the
+same whether the home is healthy or the integration stopped working months ago. Once a day
+the integration therefore publishes a small record straight into the datalog — no IPFS, no
+Pinata, no encryption, because it says nothing about the home:
+
+```json
+{"t":"hb","v":"<integration version>","ha":"<Home Assistant version>","ts":1789905600}
+```
+
+The integrator's side treats a missing heartbeat as an event and can tell "quiet because all
+is well" from "quiet because it broke". Since the record does not travel through Pinata, it
+still arrives when the report path itself is broken — revoked Pinata keys, a gateway outage.
+Each site publishes at its own moment of the day, derived from its address, so many sites do
+not all write in the same minute; a restart sends one beat a few minutes later and keeps the
+site's slot.
+
+### Reports
+
 The information collected by watchers is placed in a JSON issue and, along with the full logs, is encrypted with the integrator's address. The resulting encrypted files are placed in an archive and upload to [Pinata](https://pinata.cloud/), an IPFS pinning service. The resulting IPFS hash of the encrypted file report is sent to the [Robonomics](https://robonomics.network/) parachain as a datalog. After this, the integrator will see the report appear and will be able to download it to handle the problem with the client's smart home.
 
 ## Requirements
