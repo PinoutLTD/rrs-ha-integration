@@ -1,0 +1,25 @@
+# Dependabot opens pull requests for outdated dependencies; CI then says
+# whether they break anything. Weekly, grouped, so it is one review a week
+# rather than a stream of single-package PRs.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      # A lock-file bump rarely deserves its own review; a breaking major does.
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      actions:
+        patterns: ["*"]

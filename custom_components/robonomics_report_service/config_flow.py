@@ -4,8 +4,8 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.selector import selector
+from robonomicsinterface import Keypair, is_valid_address
 
-from .chain import Keypair, ss58_decode
 from .const import (
     CONF_NETWORK,
     CONF_PINATA_PUBLIC,
@@ -82,9 +82,8 @@ def address_errors(values: dict[str, Any]) -> dict[str, str]:
         address = (values.get(field) or "").strip()
         if not address:
             continue
-        try:
-            ss58_decode(address)
-        except ValueError:
+        # Robonomics format only: a `5…` address is another network's spelling.
+        if not is_valid_address(address):
             errors[field] = "invalid_address"
     return errors
 
@@ -133,8 +132,8 @@ class ReportServiceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if self._generated_seed is None:
             try:
                 self._generated_seed = Robonomics.generate_seed()
-                generated_kp = Keypair.create_from_secret(cast(str, self._generated_seed))
-                self._generated_address = generated_kp.ss58_address
+                generated_kp = Keypair.from_secret(cast(str, self._generated_seed))
+                self._generated_address = generated_kp.address
             except Exception:
                 errors["base"] = "seed_generation_failed"
 
@@ -155,7 +154,7 @@ class ReportServiceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             # Validation only: a seed that cannot produce a keypair would
             # leave the site unable to publish anything.
-            Keypair.create_from_secret(selected_seed)
+            Keypair.from_secret(selected_seed)
         except Exception:
             return self.async_show_form(
                 step_id="seed",

@@ -55,8 +55,8 @@ class FakeRobonomics:
         self.sent: list[tuple[dict, bool]] = []
         self.fails = fails
 
-    async def send_datalog(self, data, cleanup_pinata: bool = True) -> None:
-        self.sent.append((data, cleanup_pinata))
+    async def send_datalog(self, data, report: bool = True) -> None:
+        self.sent.append((data, report))
         if self.fails:
             raise RuntimeError("no endpoint answered")
 
@@ -74,11 +74,11 @@ async def test_heartbeat_is_not_a_report_so_nothing_is_unpinned():
 
     await send_once(robonomics)
 
-    (payload, cleanup_pinata), = robonomics.sent
+    (payload, report), = robonomics.sent
     assert payload["t"] == "hb"
-    # A report's payload is a CID and is unpinned when sending fails; this
-    # payload is JSON, and treating it as CIDs would unpin nonsense.
-    assert cleanup_pinata is False
+    # A report's payload is a CID: it is retried, and unpinned when refused.
+    # This payload is JSON; treating it as CIDs would unpin nonsense.
+    assert report is False
 
 
 @pytest.mark.asyncio

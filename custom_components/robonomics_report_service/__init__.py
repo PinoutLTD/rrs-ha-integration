@@ -10,6 +10,7 @@ from .const import (
     CONF_NETWORK,
     CONF_SENDER_SEED,
     CREDS_STORAGE_KEY,
+    DATALOG_QUEUE_STORAGE_KEY,
     DOMAIN,
     ERROR_WATCHERS_MANAGER,
     HEARTBEAT,
@@ -69,6 +70,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             creds_storage[PROBLEM_SERVICE_ROBONOMICS_ADDRESS],
         )
         await report_service.async_init()
+        await robonomics.async_start()
     except (StorageError, KeyError) as e:
         _LOGGER.error(
             "Failed to set up %s: missing/invalid stored credentials: %s",
@@ -85,6 +87,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Register send_report as HA service
     hass.data[DOMAIN][entry.entry_id]["report_service"] = report_service
+    hass.data[DOMAIN][entry.entry_id]["robonomics"] = robonomics
 
     async def _handle_send_report(call: ServiceCall) -> None:
         # Allow calling the service from UI, just to send pure logs
@@ -147,6 +150,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.services.async_remove(DOMAIN, PROBLEM_REPORT_SERVICE)
 
+    robonomics = data.get("robonomics")
+
+    if robonomics:
+        # The queue is saved as it changes; closing drops only the connection.
+        await robonomics.async_close()
+
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
 
     return True
@@ -155,6 +164,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Called when the config entry is removed from Home Assistant."""
     await async_remove_store(hass, CREDS_STORAGE_KEY)
+    await async_remove_store(hass, DATALOG_QUEUE_STORAGE_KEY)
 
     log_path = hass.config.path(LOGS_PATH)
     backup_path = hass.config.path(LOGS_BACKUP_PATH)

@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main, drop-substrate-interface]
+  pull_request:
+
+# The workflow only reads the repository; nothing here needs write access.
+permissions:
+  contents: read
+
+# A new push to a branch makes the previous run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The Home Assistant release the tests run against. HA pins some of our
+  # dependencies itself (PyNaCl, websockets), so installing both together is
+  # what shows a conflict before a site does.
+  HOME_ASSISTANT: "2026.9.3"
+
+jobs:
+  checks:
+    name: lint and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      # --locked fails when uv.lock no longer matches pyproject.toml.
+      - name: Install dependencies from the lock file
+        run: uv sync --locked --extra dev
+
+      - name: Ruff
+        run: uv run ruff check .
+
+      # Without Home Assistant only the modules that do not import it run
+      # (the publishing queue, the library contract).
+      - name: Tests without Home Assistant
+        run: uv run pytest -q
+
+  home-assistant:
+    name: tests with Home Assistant
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Every module imports, every test runs
+        run: |
+          uv run --python 3.14 --extra dev --with "homeassistant==$HOME_ASSISTANT" \
+            python -c "import custom_components.robonomics_report_service.config_flow, custom_components.robonomics_report_service.robonomics"
+          uv run --python 3.14 --extra dev --with "homeassistant==$HOME_ASSISTANT" pytest -q
+
+  manifest:
+    name: manifest matches pyproject
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Home Assistant installs from manifest.json, the tests from
+      # pyproject.toml; a pin changed in one place only would test one thing
+      # and ship another.
+      - name: Compare the runtime pins
+        run: |
+          python3 - <<'PY'
+          import json, sys, tomllib
+          manifest = json.load(open("custom_components/robonomics_report_service/manifest.json"))
+          project = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]
+          missing = [r for r in manifest["requirements"] if r not in project]
+          if missing:
+              sys.exit(f"in manifest.json but not in pyproject.toml: {missing}")
+          print("manifest requirements:", manifest["requirements"])
+          PY
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # gitleaks scans history, not just the tip
+
+      # The gitleaks tool is MIT; only its Action wrapper needs a paid licence
+      # for organisations, so the binary is used directly, pinned and verified.
+      - name: Gitleaks
+        env:
+          VERSION: 8.30.1
+          SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          archive="gitleaks_${VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/$archive"
+          echo "$SHA256  $archive" | sha256sum --check --status
+          tar xzf "$archive" gitleaks
+          ./gitleaks git . --redact --no-banner --exit-code 1
