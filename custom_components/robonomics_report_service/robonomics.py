@@ -12,6 +12,7 @@ from collections.abc import Callable
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_call_later
+from homeassistant.util.ssl import client_context
 from robonomicsinterface import Keypair, RobonomicsClient, generate_mnemonic
 
 from .const import DATALOG_QUEUE_STORAGE_KEY, NETWORK_GENESIS, NETWORK_WSS
@@ -40,7 +41,13 @@ class Robonomics:
         self.sender_address: str = self.sender_keypair.address
 
         self.client = RobonomicsClient(
-            NETWORK_WSS[network], genesis_hash=NETWORK_GENESIS[network]
+            NETWORK_WSS[network],
+            genesis_hash=NETWORK_GENESIS[network],
+            # Home Assistant's own TLS context, built when HA starts. Without
+            # it the WebSocket library builds a fresh one on every connection,
+            # reading the CA bundle from disk inside the event loop, which HA
+            # reports as "Detected blocking call".
+            ssl=client_context(),
         )
         self.publisher = DatalogPublisher(
             self.client.datalog,
