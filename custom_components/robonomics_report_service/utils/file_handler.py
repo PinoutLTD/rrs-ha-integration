@@ -6,8 +6,8 @@ from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import homeassistant.util.dt as dt_util
+from robonomicsinterface import Keypair
 
-from ..chain import Keypair
 from ..const import REPORT_FILE_MAX_BYTES
 from ..exceptions import (
     EncryptedFilesStagingError,

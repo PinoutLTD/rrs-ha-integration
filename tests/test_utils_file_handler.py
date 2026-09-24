@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import cast
 from zipfile import ZipFile
 
-from chain import Keypair
+from robonomicsinterface import Keypair
 
 from custom_components.robonomics_report_service.utils import file_handler
 
@@ -116,13 +116,13 @@ def test_create_temp_archive(
 
     archive_path = file_handler.create_temp_archive(
         dir_with_files_path,
-        sender_account.ss58_address,
+        sender_account.address,
         temp_dir_name_prefix
     )
 
     assert os.path.isfile(archive_path)
     archive_name = os.path.basename(archive_path)
-    assert archive_name.startswith(sender_account.ss58_address)
+    assert archive_name.startswith(sender_account.address)
 
     dir_with_extracted_files = tmp_path / "dir_with_extracted_files"
     dir_with_extracted_files.mkdir()

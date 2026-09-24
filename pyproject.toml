@@ -1,0 +1,35 @@
+# Development and tests only. The integration itself gets its dependencies from
+# manifest.json: Home Assistant installs them, and this file plays no part at
+# runtime. Keep the runtime pins here equal to the manifest's.
+[project]
+name = "rrs-ha-integration-dev"
+version = "0.0.0"
+description = "Dev tooling for the Robonomics Report Service integration"
+requires-python = ">=3.13"
+dependencies = [
+    "robonomics-interface==3.0.0rc1",
+    # The integration imports it at runtime (manifest.json); without it the
+    # package cannot be imported in tests and unrelated modules fail too.
+    "pinatapy-vourhey==0.1.9",
+    "aiohttp>=3.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.0",
+    "ruff>=0.15.8",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+addopts = ["--disable-plugin-autoload", "-p", "pytest_asyncio.plugin"]
+asyncio_mode = "auto"
+testpaths = ["tests"]

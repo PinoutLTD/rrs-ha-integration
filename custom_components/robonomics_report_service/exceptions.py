@@ -14,28 +14,6 @@ class EnvelopeRecipientEncryptError(RobonomicsReportServiceError):
         super().__init__(msg)
 
 
-class EnvelopePackageDecryptError(RobonomicsReportServiceError):
-    """
-    Invalid envelope package (format/schema) or recipient key missing
-    during decryption.
-    """
-
-    def __init__(self, msg: str, address: str | None = None) -> None:
-        self.address = address
-        full_msg = msg
-        if address is not None:
-            full_msg = f"{msg}: {address}"
-        super().__init__(full_msg)
-
-
-class EnvelopeCryptoDecryptError(RobonomicsReportServiceError):
-    """Envelope crypto operation failed during decrypting."""
-
-    def __init__(self, stage: str) -> None:
-        self.stage = stage
-        super().__init__(f"Envelope decrypt failed (stage={stage})")
-
-
 # for file_handler.py
 class EncryptedFilesStagingError(RobonomicsReportServiceError):
     """Failed to prepare encrypted files in temp directory."""

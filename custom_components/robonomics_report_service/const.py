@@ -3,6 +3,8 @@ PROBLEM_REPORT_SERVICE = "send_problem_report"
 ERROR_WATCHERS_MANAGER = "error_watchers_manager"
 
 CREDS_STORAGE_KEY = "creds_storage"
+# Reports waiting to be published, kept across restarts.
+DATALOG_QUEUE_STORAGE_KEY = "datalog_queue"
 
 HEARTBEAT = "heartbeat"
 HEARTBEAT_INTERVAL = 24 * 60  # Mins
@@ -20,6 +22,12 @@ OWNER_ADDRESS = "subscription_owner_robonomics_address"
 NETWORK_POLKADOT = "polkadot"
 NETWORK_KUSAMA = "kusama"
 DEFAULT_NETWORK = NETWORK_POLKADOT
+
+# Every node the client connects to must be a node of the chosen network.
+NETWORK_GENESIS = {
+    NETWORK_POLKADOT: "0x29f4371dcc41045f5041489dfcd51389bf8ccd2161332e0de1ca803bcc3ee872",
+    NETWORK_KUSAMA: "0x631ccc82a078481584041656af292834e1ae6daab61d2875b4dd0c14bb9b17bc",
+}
 
 NETWORK_WSS = {
     NETWORK_POLKADOT: [

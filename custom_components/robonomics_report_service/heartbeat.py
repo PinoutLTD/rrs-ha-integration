@@ -116,7 +116,7 @@ class Heartbeat:
         payload = heartbeat_payload(self.version, HA_VERSION, dt_util.utcnow())
         try:
             # Not a report: there is nothing on Pinata to clean up if it fails.
-            await self.robonomics.send_datalog(payload, cleanup_pinata=False)
+            await self.robonomics.send_datalog(payload, report=False)
         except Exception:
             # A missed beat is the connector's business, not an error to retry
             # here: the next one is a day away and silence is the signal.

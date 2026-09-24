@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-# The `chain` package is plain Python: its tests must run without the whole
-# Home Assistant runtime, so the component directory goes on the path.
+# Modules that do not import Home Assistant (publisher.py) are tested without
+# it: the component directory goes on the path so they import on their own.
 COMPONENT_DIR = Path(__file__).parents[1] / "custom_components" / "robonomics_report_service"
 sys.path.insert(0, str(COMPONENT_DIR))
 
@@ -20,18 +20,18 @@ TEMP_DIR_NAME_PREFIX = "dir_for_test"
 
 @pytest.fixture(scope="module", name="sender_account")
 def fixture_sender_account():
-    """The site's keypair, on the integration's own crypto"""
-    from chain import Keypair
+    """The site's keypair"""
+    from robonomicsinterface import Keypair
 
-    return Keypair.create_from_secret(SENDER_SEED)
+    return Keypair.from_secret(SENDER_SEED)
 
 
 @pytest.fixture(scope="module", name="recipient_account")
 def fixture_recipient_account():
-    """The integrator's keypair, on the integration's own crypto"""
-    from chain import Keypair
+    """The integrator's keypair"""
+    from robonomicsinterface import Keypair
 
-    return Keypair.create_from_secret(RECIPIENT_SEED)
+    return Keypair.from_secret(RECIPIENT_SEED)
 
 
 @pytest.fixture(scope="module", name="temp_dir_name_prefix")

@@ -1,27 +1,25 @@
-import asyncio
+"""The site's link to the Robonomics chain: one client, one publishing queue.
+
+The client comes from robonomics-interface. It connects on first use, keeps
+one connection with the parsed runtime metadata, checks that the node belongs
+to the configured network, and reconnects on its own. What happens to a record
+that cannot be published right now is `publisher.DatalogPublisher`'s business.
+"""
+
 import json
 import logging
-from collections import deque
+from collections.abc import Callable
 
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.event import async_call_later
+from robonomicsinterface import Keypair, RobonomicsClient, generate_mnemonic
 
-from .chain import Keypair
-from .chain.client import (
-    ChainError,
-    ExtrinsicFailedError,
-    RobonomicsClient,
-    RpcError,
-)
-from .const import NETWORK_WSS
-from .exceptions import RobonomicsError
+from .const import DATALOG_QUEUE_STORAGE_KEY, NETWORK_GENESIS, NETWORK_WSS
 from .ipfs import IPFS
+from .publisher import DatalogPublisher, Pending
+from .utils.ha_storage import async_load_from_store, async_save_to_store
 
 _LOGGER = logging.getLogger(__name__)
-
-# Only transport trouble is worth another endpoint; a call the chain itself
-# rejected will be rejected again.
-RETRYABLE_ERRORS = (RpcError, ChainError, TimeoutError, OSError)
 
 
 class Robonomics:
@@ -37,142 +35,73 @@ class Robonomics:
     ):
         self.hass: HomeAssistant = hass
         self.ipfs: IPFS = ipfs
-        self.sender_seed: str = sender_seed
-        self.wss_endpoints: list[str] = NETWORK_WSS[network]
-        self.current_wss: str = self.wss_endpoints[0]
 
-        self.sender_keypair: Keypair = Keypair.create_from_secret(sender_seed)
-        self.sender_address: str = self.sender_keypair.ss58_address
+        self.sender_keypair: Keypair = Keypair.from_secret(sender_seed)
+        self.sender_address: str = self.sender_keypair.address
 
-        self._owner_address = owner_address
-        self._clients: dict[str, RobonomicsClient] = {}
-
-        self._datalog_queue = deque()
-        self._worker_task: asyncio.Task | None = None
-        self._queue_lock = asyncio.Lock()
+        self.client = RobonomicsClient(
+            NETWORK_WSS[network], genesis_hash=NETWORK_GENESIS[network]
+        )
+        self.publisher = DatalogPublisher(
+            self.client.datalog,
+            self.sender_keypair,
+            # Without an owner the site publishes on its own subscription.
+            owner_address or self.sender_address,
+            save=self._save_queue,
+            on_dropped=self._on_dropped,
+            schedule=self._schedule,
+            start_task=lambda coro: hass.async_create_background_task(
+                coro, "robonomics_report_service datalog"
+            ),
+        )
 
     @staticmethod
     def generate_seed() -> str:
         """Return mnemonic phrase as seed for account"""
-        return Keypair.generate_mnemonic()
+        return generate_mnemonic()
 
-    async def send_datalog(
-        self, data_to_send: str | dict, cleanup_pinata: bool = True
-    ) -> None:
-        """Send datalog, async style.
+    async def async_start(self) -> None:
+        """Pick up the reports that were waiting when Home Assistant stopped."""
 
-        `cleanup_pinata` says whether the payload points at files on Pinata
-        that should be unpinned if the record cannot be published. A report
-        does; a heartbeat carries its own JSON and has nothing to clean up.
+        saved = await async_load_from_store(self.hass, DATALOG_QUEUE_STORAGE_KEY)
+        self.publisher.restore(saved.get("pending", []))
+        self.publisher.kick()
+
+    async def async_close(self) -> None:
+        await self.publisher.close()
+        await self.client.close()
+
+    async def send_datalog(self, data_to_send: str | dict, report: bool = True) -> None:
+        """Queue a record for the datalog; it is published in the background.
+
+        `report` says the payload is a CID of files on Pinata: such a record is
+        retried when the network fails and unpinned when the chain refuses it.
+        A heartbeat is not a report.
         """
 
         if isinstance(data_to_send, dict):
             data_to_send = json.dumps(data_to_send, separators=(",", ":"))
-        await self._handle_datalog_request(data_to_send, cleanup_pinata)
+        await self.publisher.publish(data_to_send, report)
 
-    def _client(self) -> RobonomicsClient:
-        """One client per endpoint, so parsed metadata is reused."""
+    def _schedule(self, delay: float, action: Callable[[], None]) -> Callable[[], None]:
+        # Marked as a callback so Home Assistant runs it in the event loop,
+        # not in its executor.
+        return async_call_later(self.hass, delay, callback(lambda _now: action()))
 
-        if self.current_wss not in self._clients:
-            self._clients[self.current_wss] = RobonomicsClient(
-                async_get_clientsession(self.hass), self.current_wss
+    async def _save_queue(self, pending: list[dict]) -> None:
+        await async_save_to_store(
+            self.hass, DATALOG_QUEUE_STORAGE_KEY, {"pending": pending}
+        )
+
+    async def _on_dropped(self, item: Pending, reason: str) -> None:
+        if not item.report:
+            return
+        result = await self.ipfs.unpin_files_from_pinata(item.payload)
+        if result and result.failed:
+            _LOGGER.warning(
+                "Pinata cleanup incomplete after a dropped report "
+                "(removed=%s/%s, failed=%s)",
+                result.succeeded,
+                result.attempted,
+                result.failed,
             )
-        return self._clients[self.current_wss]
-
-    async def _handle_datalog_request(
-        self, data_to_send: str, cleanup_pinata: bool = True
-    ) -> None:
-        self._datalog_queue.append((data_to_send, cleanup_pinata))
-        async with self._queue_lock:
-            if self._worker_task is None or self._worker_task.done():
-                self._worker_task = self.hass.async_create_task(
-                    self._datalog_worker()
-                )
-
-    async def _datalog_worker(self) -> None:
-        try:
-            while self._datalog_queue:
-                data_to_send, cleanup_pinata = self._datalog_queue.popleft()
-
-                try:
-                    await self._send_datalog(data_to_send)
-                except RobonomicsError as e:
-                    _LOGGER.warning(
-                        "Datalog send failed "
-                        "(will drop payload from queue): %s",
-                        e,
-                    )
-                    if not cleanup_pinata:
-                        continue
-                    try:
-                        result = await self.ipfs.unpin_files_from_pinata(
-                            data_to_send
-                        )
-                    except Exception:
-                        result = None
-
-                    if result and result.failed:
-                        _LOGGER.warning(
-                            "Pinata cleanup incomplete after datalog "
-                            "failure (removed=%s/%s, failed=%s)",
-                            result.succeeded,
-                            result.attempted,
-                            result.failed,
-                        )
-
-        finally:
-            # In case the worker reached the end of the queue,
-            # but did not have time to set worker_task = None,
-            # and at the same time a new request for the datalog appeared.
-            async with self._queue_lock:
-                self._worker_task = None
-                if self._datalog_queue:
-                    self._worker_task = self.hass.async_create_task(
-                        self._datalog_worker()
-                    )
-
-    async def _send_datalog(self, data_to_send: str) -> str:
-        """Publish one record, trying each endpoint before giving up."""
-
-        last_error: Exception | None = None
-
-        for _ in range(len(self.wss_endpoints)):
-            try:
-                block_hash = await self._client().record_datalog(
-                    self.sender_keypair,
-                    data_to_send,
-                    # Without an owner the site publishes on its own subscription.
-                    self._owner_address or self.sender_address,
-                )
-            except ExtrinsicFailedError as e:
-                # The chain accepted the extrinsic and refused the call: a
-                # missing or expired subscription looks exactly like this.
-                raise RobonomicsError(f"Failed to send datalog ({e})") from e
-            except RETRYABLE_ERRORS as e:
-                _LOGGER.debug("Datalog attempt on %s failed: %s", self.current_wss, e)
-                last_error = e
-                self.change_current_wss()
-                continue
-
-            _LOGGER.debug("Datalog is recorded in block %s", block_hash)
-            return block_hash
-
-        raise RobonomicsError(
-            f"Failed to send datalog ({self._exc_short(last_error)})"
-        ) from last_error
-
-    def change_current_wss(self) -> None:
-        """Set next current wss"""
-
-        current_index = self.wss_endpoints.index(self.current_wss)
-        next_index = (current_index + 1) % len(self.wss_endpoints)
-        self.current_wss = self.wss_endpoints[next_index]
-        _LOGGER.debug("New Robonomics ws is %s", self.current_wss)
-
-    @staticmethod
-    def _exc_short(e: BaseException | None) -> str:
-        if e is None:
-            return "no endpoint answered"
-        name = e.__class__.__name__
-        msg = str(e).strip()
-        return f"{name}: {msg}" if msg else name
