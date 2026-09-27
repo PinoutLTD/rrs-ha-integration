@@ -18,6 +18,7 @@ from .const import (
     HEARTBEAT_STARTUP_DELAY,
     LOGS_BACKUP_PATH,
     LOGS_PATH,
+    NETWORK_POLKADOT,
     OWNER_ADDRESS,
     PROBLEM_REPORT_SERVICE,
     PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
@@ -29,7 +30,11 @@ from .ipfs import IPFS
 from .report_service import ReportService
 from .robonomics import Robonomics
 from .utils.file_handler import remove_logs_dir_if_empty, remove_logs_files
-from .utils.ha_storage import async_load_from_store, async_remove_store
+from .utils.ha_storage import (
+    async_load_from_store,
+    async_remove_store,
+    async_save_to_store,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,11 +57,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Load credentials from storage
         creds_storage = await async_load_from_store(hass, CREDS_STORAGE_KEY)
 
+        await _move_off_kusama(hass, creds_storage)
+
         # Prepare Robonomics and IPFS classes
         ipfs = IPFS(hass)
         robonomics = Robonomics(
             hass,
-            creds_storage[CONF_NETWORK],
             ipfs,
             creds_storage[CONF_SENDER_SEED],
             creds_storage.get(OWNER_ADDRESS),
@@ -118,6 +124,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     return True
+
+
+async def _move_off_kusama(hass: HomeAssistant, creds_storage: dict) -> None:
+    """Robonomics on Kusama is legacy and shutting down: publish on Polkadot.
+
+    The site's key is the same on both networks; on Polkadot it needs its own
+    subscription, which the integrator arranges.
+    """
+
+    network = creds_storage.get(CONF_NETWORK, NETWORK_POLKADOT)
+    if network == NETWORK_POLKADOT:
+        return
+    _LOGGER.warning(
+        "Robonomics on %s is legacy and no longer supported; this site now "
+        "publishes on Polkadot. Ask the integrator to add its address to a "
+        "Polkadot subscription",
+        network,
+    )
+    creds_storage[CONF_NETWORK] = NETWORK_POLKADOT
+    await async_save_to_store(hass, CREDS_STORAGE_KEY, creds_storage)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:

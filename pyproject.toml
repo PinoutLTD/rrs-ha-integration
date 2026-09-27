@@ -7,7 +7,7 @@ version = "0.0.0"
 description = "Dev tooling for the Robonomics Report Service integration"
 requires-python = ">=3.13"
 dependencies = [
-    "robonomics-interface==3.0.0rc1",
+    "robonomics-interface==3.0.0rc2",
     # The integration imports it at runtime (manifest.json); without it the
     # package cannot be imported in tests and unrelated modules fail too.
     "pinatapy-vourhey==0.1.9",

@@ -1,8 +1,8 @@
 """The site's link to the Robonomics chain: one client, one publishing queue.
 
 The client comes from robonomics-interface. It connects on first use, keeps
-one connection with the parsed runtime metadata, checks that the node belongs
-to the configured network, and reconnects on its own. What happens to a record
+one connection with the parsed runtime metadata, checks that the node is
+Robonomics on Polkadot, and reconnects on its own. What happens to a record
 that cannot be published right now is `publisher.DatalogPublisher`'s business.
 """
 
@@ -15,7 +15,7 @@ from homeassistant.helpers.event import async_call_later
 from homeassistant.util.ssl import client_context
 from robonomicsinterface import Keypair, RobonomicsClient, generate_mnemonic
 
-from .const import DATALOG_QUEUE_STORAGE_KEY, NETWORK_GENESIS, NETWORK_WSS
+from .const import DATALOG_QUEUE_STORAGE_KEY, ROBONOMICS_ENDPOINTS
 from .ipfs import IPFS
 from .publisher import DatalogPublisher, Pending
 from .utils.ha_storage import async_load_from_store, async_save_to_store
@@ -29,7 +29,6 @@ class Robonomics:
     def __init__(
         self,
         hass: HomeAssistant,
-        network: str,
         ipfs: IPFS,
         sender_seed: str,
         owner_address: str | None = None,
@@ -40,9 +39,9 @@ class Robonomics:
         self.sender_keypair: Keypair = Keypair.from_secret(sender_seed)
         self.sender_address: str = self.sender_keypair.address
 
+        # The library checks that every node is Robonomics on Polkadot.
         self.client = RobonomicsClient(
-            NETWORK_WSS[network],
-            genesis_hash=NETWORK_GENESIS[network],
+            ROBONOMICS_ENDPOINTS,
             # Home Assistant's own TLS context, built when HA starts. Without
             # it the WebSocket library builds a fresh one on every connection,
             # reading the CA bundle from disk inside the event loop, which HA

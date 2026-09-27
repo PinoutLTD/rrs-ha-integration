@@ -72,7 +72,6 @@ Clone the [repository](https://github.com/PinoutLTD/rrs-ha-integration) and copy
 
 When adding the integration, you need to specify the following fields:
 
-- Network (Polkadot or Kusama)
 - Robonomics address of integrator problem service — the address with which files will be encrypted at the client's site and decrypted at the integrator's site
 - Pinata public/secret key — Pinata credentials (API keys)
 - (Optional) E-mail for receiving solutions from integrator
