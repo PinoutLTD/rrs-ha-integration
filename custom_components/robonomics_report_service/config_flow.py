@@ -3,7 +3,6 @@ from typing import Any, cast
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
-from homeassistant.helpers.selector import selector
 from robonomicsinterface import Keypair, is_valid_address
 
 from .const import (
@@ -13,9 +12,7 @@ from .const import (
     CONF_SENDER_EMAIL,
     CONF_SENDER_SEED,
     CREDS_STORAGE_KEY,
-    DEFAULT_NETWORK,
     DOMAIN,
-    NETWORK_KUSAMA,
     NETWORK_POLKADOT,
     OWNER_ADDRESS,
     PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
@@ -27,17 +24,6 @@ from .utils.ha_storage import async_load_from_store, async_save_to_store
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_NETWORK, default=DEFAULT_NETWORK): selector(
-            {
-                "select": {
-                    "options": [
-                        {"value": NETWORK_POLKADOT, "label": "Polkadot"},
-                        {"value": NETWORK_KUSAMA, "label": "Kusama"},
-                    ],
-                    "mode": "dropdown",
-                }
-            }
-        ),
         vol.Required(PROBLEM_SERVICE_ROBONOMICS_ADDRESS): str,
         vol.Required(CONF_PINATA_PUBLIC): str,
         vol.Required(CONF_PINATA_SECRET): str,
@@ -121,6 +107,8 @@ class ReportServiceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is None:
             return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
         self._storage_data.update(user_input)
+        # Always Polkadot; stored for betas up to 1.1.0-beta.6, which read it.
+        self._storage_data[CONF_NETWORK] = NETWORK_POLKADOT
 
         return await self.async_step_seed()
 

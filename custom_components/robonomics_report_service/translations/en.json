@@ -6,7 +6,6 @@
         "title": "Robonomics Report Service",
         "description": "Enter data (for integrator only)",
         "data": {
-          "network": "Network",
           "problem_service_robonomics_address": "Robonomics address of integrator problem service",
           "pinata_public": "Pinata public key",
           "pinata_secret": "Pinata secret key",

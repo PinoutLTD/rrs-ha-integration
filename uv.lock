@@ -768,7 +768,7 @@ wheels = [
 
 [[package]]
 name = "robonomics-interface"
-version = "3.0.0rc1"
+version = "3.0.0rc2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pynacl" },
@@ -776,9 +776,9 @@ dependencies = [
     { name = "websockets" },
     { name = "xxhash" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/82/6b/a1820de387e2af1c6e4c40878498add96d0bc079b0dda7f773ad50afdd90/robonomics_interface-3.0.0rc1.tar.gz", hash = "sha256:d1aca73029b8d04ef57037320dd20828795aa8b342a122e16df9aeb3d8df1259", size = 242203, upload-time = "2026-09-24T07:53:36.682Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/eb/7b/5229d09df6646cda8387f25123ad0443b01113db33ce5b73f89be159ac41/robonomics_interface-3.0.0rc2.tar.gz", hash = "sha256:b016a532e619a79fd8b1241362d770431fe4d620aadc5be8ea893155818dc89c", size = 245942, upload-time = "2026-09-27T09:22:46.682Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/40/dd/957d73ed2ce097f96f430f063e8e344ed2f5acb052ed1218c7fd7eded757/robonomics_interface-3.0.0rc1-py3-none-any.whl", hash = "sha256:711736395616bb64464391b8c18763676f8121b3756e7cbf4ce129bafe75f8bb", size = 65370, upload-time = "2026-09-24T07:53:35.507Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/72/314730336b27e47bfa5b025bf9ebca8cbcc14053961abfbbd261bc88495e/robonomics_interface-3.0.0rc2-py3-none-any.whl", hash = "sha256:86aa0201f410898e2ea4ba5888e7f3f12077cc15fee7a3f94b9c91939d0078cb", size = 66085, upload-time = "2026-09-27T09:22:45.486Z" },
 ]
 
 [[package]]
@@ -804,7 +804,7 @@ requires-dist = [
     { name = "pinatapy-vourhey", specifier = "==0.1.9" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.0" },
-    { name = "robonomics-interface", specifier = "==3.0.0rc1" },
+    { name = "robonomics-interface", specifier = "==3.0.0rc2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.8" },
 ]
 provides-extras = ["dev"]
