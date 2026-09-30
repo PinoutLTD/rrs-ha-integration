@@ -1,6 +1,6 @@
 from homeassistant.core import HomeAssistant, callback
 
-from .watchers import EntitiesStatusChecker, ErrorWatcher, LoggerHandler
+from .watchers import EntitiesStatusChecker, ErrorWatcher, HostHealthWatcher, LoggerHandler
 
 
 class ErrorWatchersManager:
@@ -11,6 +11,7 @@ class ErrorWatchersManager:
         self.error_watchers: list[ErrorWatcher] = [
             EntitiesStatusChecker(hass),
             LoggerHandler(hass),
+            HostHealthWatcher(hass),
         ]
 
     @callback
