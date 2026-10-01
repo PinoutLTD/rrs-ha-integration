@@ -152,22 +152,6 @@ def auto_enable_custom_integrations(recorder_mock, enable_custom_integrations):
     yield
 
 
-@pytest.fixture(autouse=True)
-def no_real_wait_for_entities(monkeypatch):
-    """The first entities check waits 15 s of real time for entities to load."""
-
-    from custom_components.robonomics_report_service.error_watchers.watchers import (
-        entities_checker,
-    )
-
-    real_sleep = entities_checker.asyncio.sleep
-
-    async def sleep(seconds, *args, **kwargs):
-        await real_sleep(0)
-
-    monkeypatch.setattr(entities_checker.asyncio, "sleep", sleep)
-
-
 @pytest.fixture(name="chain")
 def fixture_chain(monkeypatch) -> FakeChain:
     chain = FakeChain()

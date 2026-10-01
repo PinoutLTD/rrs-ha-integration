@@ -39,3 +39,5 @@ LOGS_BACKUP_PATH = f"{DOMAIN}/home-assistant.log.1"
 
 CHECK_LOGS_TIMEOUT = 24 * 60  # Mins
 CHECK_ENTITIES_TIMEOUT = 24 * 60  # Mins
+# After Home Assistant has started, before the first entities check.
+FIRST_ENTITIES_CHECK_DELAY = 120  # Seconds

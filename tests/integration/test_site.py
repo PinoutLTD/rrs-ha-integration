@@ -16,6 +16,7 @@ from custom_components.robonomics_report_service.const import (
     CHECK_ENTITIES_TIMEOUT,
     CHECK_LOGS_TIMEOUT,
     DOMAIN,
+    FIRST_ENTITIES_CHECK_DELAY,
     HEARTBEAT_STARTUP_DELAY,
     PROBLEM_REPORT_SERVICE,
 )
@@ -110,11 +111,16 @@ async def test_a_report_on_demand_arrives_encrypted_for_the_integrator(
 
 
 async def test_unavailable_entities_are_reported_after_start(
-    hass: HomeAssistant, chain: FakeChain, pinata: FakePinata
+    hass: HomeAssistant, chain: FakeChain, pinata: FakePinata, freezer
 ):
     hass.states.async_set("sensor.harness_probe", STATE_UNAVAILABLE)
 
     entry = await install(hass)
+    await settle(hass)
+    # Not at once: the first check waits for entities to settle after start.
+    assert chain.report_cids() == []
+
+    await advance(hass, freezer, timedelta(seconds=FIRST_ENTITIES_CHECK_DELAY + 1))
     await settle(hass)
 
     [cid] = chain.report_cids()

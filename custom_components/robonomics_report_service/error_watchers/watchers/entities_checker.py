@@ -15,9 +15,10 @@ from homeassistant.helpers.device_registry import (
 from homeassistant.helpers.entity_registry import (
     async_get as async_get_entity_registry,
 )
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
+from homeassistant.helpers.start import async_at_started
 
-from ...const import CHECK_ENTITIES_TIMEOUT
+from ...const import CHECK_ENTITIES_TIMEOUT, FIRST_ENTITIES_CHECK_DELAY
 from .error_watcher import ErrorWatcher
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,9 +34,10 @@ class EntitiesStatusChecker(ErrorWatcher):
         self.devices_registry = async_get_devices_registry(hass)
 
         self._check_entities_timer_listener = None
+        self._at_started_listener = None
+        self._first_check_listener = None
 
         self._period_start = dt_util.utcnow()
-        self._first_run = True
 
         # Locker to prevent parallel checking
         self._lock = asyncio.Lock()
@@ -50,25 +52,37 @@ class EntitiesStatusChecker(ErrorWatcher):
             self._check_entities,
             timedelta(minutes=CHECK_ENTITIES_TIMEOUT),
         )
-        # Start checking immediately
-        self.hass.async_create_task(self._check_entities())
+        # The first check waits for Home Assistant to finish starting and then
+        # a little longer: entities are set up and leave "unavailable" only
+        # then, and a snapshot taken earlier reports half the house.
+        self._at_started_listener = async_at_started(self.hass, self._schedule_first_check)
+
+    @callback
+    def _schedule_first_check(self, _hass: HomeAssistant) -> None:
+        self._first_check_listener = async_call_later(
+            self.hass, FIRST_ENTITIES_CHECK_DELAY, self._first_check
+        )
+
+    async def _first_check(self, _now=None) -> None:
+        self._first_check_listener = None
+        await self._check_entities()
 
     @callback
     def remove(self) -> None:
         if self._check_entities_timer_listener is not None:
             self._check_entities_timer_listener()
             self._check_entities_timer_listener = None
+        for listener in (self._at_started_listener, self._first_check_listener):
+            if listener is not None:
+                listener()
+        self._at_started_listener = None
+        self._first_check_listener = None
 
         _LOGGER.debug("EntitiesStatusChecker removed")
 
     async def _check_entities(self, _=None) -> None:
 
         async with self._lock:
-            # Delay to wait for the entities for the first run
-            if self._first_run:
-                await asyncio.sleep(15)
-                self._first_run = False
-
             period_end = dt_util.utcnow()
             period_start = self._period_start
 
