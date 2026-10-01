@@ -1,3 +1,5 @@
+import os
+
 DOMAIN = "robonomics_report_service"
 PROBLEM_REPORT_SERVICE = "send_problem_report"
 ERROR_WATCHERS_MANAGER = "error_watchers_manager"
@@ -30,6 +32,12 @@ ROBONOMICS_ENDPOINTS = [
     "wss://polkadot.rpc.robonomics.network/",
 ]
 
+# Test stand only (stand/ in the repository): a development chain and a fake
+# Pinata running next to Home Assistant. Nothing sets these on a site, and on
+# HAOS the Core container's environment cannot be set at all.
+STAND_ROBONOMICS_ENDPOINT = os.environ.get("RRS_STAND_ROBONOMICS_ENDPOINT")
+STAND_PINATA_API = os.environ.get("RRS_STAND_PINATA_API")
+
 RRS_REPORT_TEMP_DIR = "rrs_report_temp_dir"
 TRACES_FILE_NAME = ".storage/trace.saved_traces"
 
@@ -39,3 +47,5 @@ LOGS_BACKUP_PATH = f"{DOMAIN}/home-assistant.log.1"
 
 CHECK_LOGS_TIMEOUT = 24 * 60  # Mins
 CHECK_ENTITIES_TIMEOUT = 24 * 60  # Mins
+# After Home Assistant has started, before the first entities check.
+FIRST_ENTITIES_CHECK_DELAY = 120  # Seconds

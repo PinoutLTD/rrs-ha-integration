@@ -1,1 +1,4 @@
 __pycache__
+
+# Test stand runs and the dev chain binaries (scripts/stand.sh)
+.stand/

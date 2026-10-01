@@ -1,0 +1,48 @@
+name: Stand
+
+# The test stand (scripts/stand.sh): a clean Home Assistant publishing to a
+# Robonomics development chain through a fake Pinata, every report opened the
+# way the connector opens it. About 10 minutes, so not on every push: by hand,
+# nightly, and on a pull request labelled "stand".
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+  pull_request:
+    types: [labeled, synchronize, opened, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stand:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'stand')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      # The node, the chain spec builder and the runtime, checksum-verified by
+      # robonomics-interface's devchain.sh; kept between runs.
+      - uses: actions/cache@v4
+        with:
+          path: .stand/devchain
+          key: stand-devchain-${{ runner.os }}-v3.0.0rc2
+
+      - name: Run the stand
+        run: scripts/stand.sh
+
+      - name: Logs of a failed run
+        if: failure()
+        run: |
+          for f in .stand/run/*.log .stand/run/home-assistant.out .stand/run/config/home-assistant.log; do
+            [ -f "$f" ] && { echo "::group::$f"; tail -200 "$f"; echo "::endgroup::"; }
+          done

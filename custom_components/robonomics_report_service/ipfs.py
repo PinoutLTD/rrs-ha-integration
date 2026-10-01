@@ -4,17 +4,23 @@ from dataclasses import dataclass
 from typing import cast
 
 import aiohttp
+import pinatapy
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from pinatapy import PinataPy
 
-from .const import CONF_PINATA_PUBLIC, CONF_PINATA_SECRET, CREDS_STORAGE_KEY
+from .const import CONF_PINATA_PUBLIC, CONF_PINATA_SECRET, CREDS_STORAGE_KEY, STAND_PINATA_API
 from .exceptions import IPFSError, PinataKeysRevokedError, StorageError
 from .utils.ha_storage import async_load_from_store
 
 IpfsHashes = dict[str, str]
 
-PINATA_TEST_AUTHENTICATION_URL = "https://api.pinata.cloud/data/testAuthentication"
+PINATA_API = "https://api.pinata.cloud/"
+if STAND_PINATA_API:
+    # Test stand: a fake Pinata. pinatapy reads its endpoint at every call.
+    PINATA_API = STAND_PINATA_API.rstrip("/") + "/"
+    pinatapy.API_ENDPOINT = PINATA_API
+PINATA_TEST_AUTHENTICATION_URL = PINATA_API + "data/testAuthentication"
 
 
 async def async_check_pinata_keys(hass: HomeAssistant, public: str, secret: str) -> str | None:

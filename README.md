@@ -84,3 +84,14 @@ When adding the integration, you need to specify the following fields:
 - (Optional) Robonomics address of subscription owner — by default, the integration creates its own Robonomics address for which you need to purchase a subscription; this field allows to specify another subscription to which you can add the integration address
 
 After that, the integration will generate a Robonomics account (and provide you with a seed phrase). You can also specify an existing account by providing your own seed phrase.
+
+## Testing
+
+- `uv run pytest` — the modules that do not import Home Assistant (the publishing queue, host health rules, the library contract).
+- `scripts/stand.sh` — the test stand, about 10 minutes, runs on its own machine:
+  - a clean Home Assistant (the release CI tests against) with the integration installed;
+  - a Robonomics development chain (robonomics-interface's `scripts/devchain.sh`) and a fake Pinata.
+
+  It checks that a report on demand, the entities check, the heartbeat and an unclean shutdown all arrive on the chain, and that every report decrypts with the integrator's key, as the connector opens it. Home Assistant's log must hold no errors from the integration and no "Detected blocking call". See `stand/run.py`.
+
+  CI runs the stand by hand, nightly, and on pull requests labelled `stand`.
