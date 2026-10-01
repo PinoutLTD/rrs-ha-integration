@@ -5,6 +5,8 @@ ERROR_WATCHERS_MANAGER = "error_watchers_manager"
 CREDS_STORAGE_KEY = "creds_storage"
 # Reports waiting to be published, kept across restarts.
 DATALOG_QUEUE_STORAGE_KEY = "datalog_queue"
+# Daily memory means of the host, for the host health watcher.
+HOST_HEALTH_STORAGE_KEY = "host_health"
 
 HEARTBEAT = "heartbeat"
 HEARTBEAT_INTERVAL = 24 * 60  # Mins

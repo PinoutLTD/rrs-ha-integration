@@ -10,6 +10,9 @@
     "system_log",
     "recorder"
   ],
+  "after_dependencies": [
+    "hassio"
+  ],
   "requirements": [
     "robonomics-interface==3.0.0rc2",
     "pinatapy-vourhey==0.1.9"

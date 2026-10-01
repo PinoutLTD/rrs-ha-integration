@@ -16,6 +16,7 @@ from .const import (
     HEARTBEAT,
     HEARTBEAT_INTERVAL,
     HEARTBEAT_STARTUP_DELAY,
+    HOST_HEALTH_STORAGE_KEY,
     LOGS_BACKUP_PATH,
     LOGS_PATH,
     NETWORK_POLKADOT,
@@ -191,6 +192,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Called when the config entry is removed from Home Assistant."""
     await async_remove_store(hass, CREDS_STORAGE_KEY)
     await async_remove_store(hass, DATALOG_QUEUE_STORAGE_KEY)
+    await async_remove_store(hass, HOST_HEALTH_STORAGE_KEY)
 
     log_path = hass.config.path(LOGS_PATH)
     backup_path = hass.config.path(LOGS_BACKUP_PATH)

@@ -8,6 +8,12 @@ The integration creates error watchers that monitor Home Assistant for various i
 
 - `LoggerHandler` — collects all logs with `critical`, `error`, and `warning` levels (in raw and accumulated style)
 - `EntitiesStatusChecker` — collects information about entities with the `STATE_UNAVAILABLE` status
+- `HostHealthWatcher` — watches the host rather than Home Assistant, and reports as soon as it finds something, not every 24 hours:
+  - host memory above 90% for 30 minutes;
+  - memory rising day after day before it gets there;
+  - a previous run that did not end cleanly (crash, freeze, power loss), with when it was last seen and whether the whole host restarted.
+
+  With a Supervisor (HAOS, Supervised), a memory report also lists memory per container. The watcher only reads: memory from `/proc/meminfo` every 10 minutes, the recorder once at start, the Supervisor only when there is something to report.
 
 ### Heartbeat
 
