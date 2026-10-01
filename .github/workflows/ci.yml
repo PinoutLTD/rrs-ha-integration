@@ -19,6 +19,8 @@ env:
   # dependencies itself (PyNaCl, websockets), so installing both together is
   # what shows a conflict before a site does.
   HOME_ASSISTANT: "2026.9.3"
+  # pytest-homeassistant-custom-component release that pins that HA version.
+  PHCC: "0.13.366"
 
 jobs:
   checks:
@@ -45,7 +47,7 @@ jobs:
         run: uv run pytest -q
 
   home-assistant:
-    name: tests with Home Assistant
+    name: tests on a real Home Assistant
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -54,11 +56,21 @@ jobs:
         with:
           enable-cache: true
 
+      # A clean Home Assistant core per test, the integration installed through
+      # its setup form (tests/integration); the same script runs locally. The
+      # plugin release pins Home Assistant: 0.13.366 is 2026.9.3.
       - name: Every module imports, every test runs
         run: |
-          uv run --python 3.14 --extra dev --with "homeassistant==$HOME_ASSISTANT" \
-            python -c "import custom_components.robonomics_report_service.config_flow, custom_components.robonomics_report_service.robonomics"
-          uv run --python 3.14 --extra dev --with "homeassistant==$HOME_ASSISTANT" pytest -q
+          uv run --python 3.14 --extra dev --with "pytest-homeassistant-custom-component==$PHCC" \
+            python - <<'PY'
+          import homeassistant.const, os, sys
+          import custom_components.robonomics_report_service.config_flow
+          import custom_components.robonomics_report_service.robonomics
+          if homeassistant.const.__version__ != os.environ["HOME_ASSISTANT"]:
+              sys.exit(f"the plugin brings HA {homeassistant.const.__version__}, "
+                       f"CI expects {os.environ['HOME_ASSISTANT']}: bump them together")
+          PY
+          scripts/test-ha.sh -q
 
   manifest:
     name: manifest matches pyproject
