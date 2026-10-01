@@ -15,7 +15,7 @@ from homeassistant.helpers.event import async_call_later
 from homeassistant.util.ssl import client_context
 from robonomicsinterface import Keypair, RobonomicsClient, generate_mnemonic
 
-from .const import DATALOG_QUEUE_STORAGE_KEY, ROBONOMICS_ENDPOINTS
+from .const import DATALOG_QUEUE_STORAGE_KEY, ROBONOMICS_ENDPOINTS, STAND_ROBONOMICS_ENDPOINT
 from .ipfs import IPFS
 from .publisher import DatalogPublisher, Pending
 from .utils.ha_storage import async_load_from_store, async_save_to_store
@@ -39,15 +39,26 @@ class Robonomics:
         self.sender_keypair: Keypair = Keypair.from_secret(sender_seed)
         self.sender_address: str = self.sender_keypair.address
 
-        # The library checks that every node is Robonomics on Polkadot.
-        self.client = RobonomicsClient(
-            ROBONOMICS_ENDPOINTS,
-            # Home Assistant's own TLS context, built when HA starts. Without
-            # it the WebSocket library builds a fresh one on every connection,
-            # reading the CA bundle from disk inside the event loop, which HA
-            # reports as "Detected blocking call".
-            ssl=client_context(),
-        )
+        if STAND_ROBONOMICS_ENDPOINT:
+            # A development chain: its own genesis, and a single node that
+            # never counts as healthy by its peers.
+            _LOGGER.warning(
+                "Publishing to the test chain at %s (RRS_STAND_ROBONOMICS_ENDPOINT)",
+                STAND_ROBONOMICS_ENDPOINT,
+            )
+            self.client = RobonomicsClient(
+                STAND_ROBONOMICS_ENDPOINT, genesis_hash=None, require_healthy=False
+            )
+        else:
+            # The library checks that every node is Robonomics on Polkadot.
+            self.client = RobonomicsClient(
+                ROBONOMICS_ENDPOINTS,
+                # Home Assistant's own TLS context, built when HA starts. Without
+                # it the WebSocket library builds a fresh one on every connection,
+                # reading the CA bundle from disk inside the event loop, which HA
+                # reports as "Detected blocking call".
+                ssl=client_context(),
+            )
         self.publisher = DatalogPublisher(
             self.client.datalog,
             self.sender_keypair,
