@@ -1,7 +1,9 @@
 """The integration on a clean Home Assistant, from setup form to decrypted report."""
 
+import json
 import logging
 from datetime import timedelta
+from pathlib import Path
 
 from homeassistant import config_entries
 from homeassistant.const import STATE_UNAVAILABLE
@@ -28,6 +30,9 @@ from ..conftest import SENDER_SEED
 from .conftest import FakeChain, FakePinata, install, open_report
 
 SITE = Keypair.from_secret(SENDER_SEED).address
+MANIFEST = json.loads(
+    (Path(__file__).parents[2] / "custom_components" / DOMAIN / "manifest.json").read_text()
+)
 
 
 async def advance(hass: HomeAssistant, freezer, delta: timedelta) -> None:
@@ -57,7 +62,7 @@ async def test_setup_form_installs_and_the_site_says_it_is_alive(
     await settle(hass)
 
     [beat] = chain.heartbeats()
-    assert beat["v"] == "1.1.0-beta.7"
+    assert beat["v"] == MANIFEST["version"]
     assert beat["ha"]
     # Published by the site's own key, through its own subscription.
     assert chain.records[0][0] == SITE and chain.records[0][2] == SITE
