@@ -18,6 +18,7 @@ from homeassistant.helpers.entity_registry import (
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.start import async_at_started
 
+from ... import entity_health
 from ...const import CHECK_ENTITIES_TIMEOUT, FIRST_ENTITIES_CHECK_DELAY
 from .error_watcher import ErrorWatcher
 
@@ -89,6 +90,8 @@ class EntitiesStatusChecker(ErrorWatcher):
             all_entity_ids = self._get_all_entity_ids()
 
             unavailable_ids: list[str] = []
+            unavailable_by_entry: dict[str, int] = {}
+            device_states: dict[str, entity_health.DeviceStates] = {}
 
             for entity_id in all_entity_ids:
                 entity_entry = self.entity_registry.async_get(entity_id)
@@ -99,17 +102,40 @@ class EntitiesStatusChecker(ErrorWatcher):
                     continue
 
                 entity_state = self.hass.states.get(entity_id)
-
-                # Entity is unavaliable if explicit STATE_UNAVAILABLE
-                if (
-                    entity_state is not None
-                    and entity_state.state == STATE_UNAVAILABLE
-                ):
-                    unavailable_ids.append(entity_id)
+                if entity_state is None:
                     continue
 
+                # A device's entities, to find devices that never delivered data
+                if entity_entry is not None and entity_entry.device_id is not None:
+                    device = device_states.get(entity_entry.device_id)
+                    if device is None:
+                        device = device_states[entity_entry.device_id] = (
+                            entity_health.DeviceStates(
+                                self._get_device_name(
+                                    self.devices_registry.async_get(
+                                        entity_entry.device_id
+                                    )
+                                )
+                            )
+                        )
+                    device.states[entity_id] = entity_state.state
+
+                # Entity is unavaliable if explicit STATE_UNAVAILABLE
+                if entity_state.state == STATE_UNAVAILABLE:
+                    unavailable_ids.append(entity_id)
+                    if entity_entry is not None and entity_entry.config_entry_id:
+                        entry_id = entity_entry.config_entry_id
+                        unavailable_by_entry[entry_id] = (
+                            unavailable_by_entry.get(entry_id, 0) + 1
+                        )
+
+            not_loaded = entity_health.not_loaded(
+                self._entries(), unavailable_by_entry
+            )
+            silent = entity_health.silent_devices(device_states)
+
             # If nothing to report, skip
-            if not unavailable_ids:
+            if not unavailable_ids and not not_loaded and not silent:
                 self._period_start = period_end
                 return
 
@@ -127,11 +153,12 @@ class EntitiesStatusChecker(ErrorWatcher):
                 "schema_version": 1,
                 "ts_start": period_start.isoformat(),
                 "ts_end": period_end.isoformat(),
-                "summary": (
-                    "Entities health: "
-                    f"{unavailable_counts['entities']} unavailable "
-                    f"({unavailable_counts['devices']} devices) "
-                    f"(interval {CHECK_ENTITIES_TIMEOUT} min)"
+                "summary": entity_health.summary(
+                    unavailable_counts["entities"],
+                    unavailable_counts["devices"],
+                    CHECK_ENTITIES_TIMEOUT,
+                    len(not_loaded),
+                    len(silent),
                 ),
                 "details": {
                     "check_timeout_minutes": CHECK_ENTITIES_TIMEOUT,
@@ -139,6 +166,10 @@ class EntitiesStatusChecker(ErrorWatcher):
                         "unavailable_counts": unavailable_counts,
                     },
                     "unavailable_entities": unavailable_entities,
+                    # Integrations not running, and devices that never
+                    # delivered data (entity_health.py).
+                    "integrations_not_loaded": not_loaded,
+                    "devices_without_data": silent,
                     "preview": {
                         "unavailable_entities": self._preview_devices(
                             unavailable_entities
@@ -156,6 +187,19 @@ class EntitiesStatusChecker(ErrorWatcher):
                 unavailable_counts["devices"],
             )
             await self._send_report(issue)
+
+    def _entries(self) -> list[entity_health.EntryInfo]:
+        return [
+            entity_health.EntryInfo(
+                entry_id=entry.entry_id,
+                domain=entry.domain,
+                title=entry.title,
+                state=entry.state.value,
+                reason=entry.reason,
+                disabled=entry.disabled_by is not None,
+            )
+            for entry in self.hass.config_entries.async_entries()
+        ]
 
     def _get_all_entity_ids(self) -> set[str]:
 

@@ -6,8 +6,10 @@ Integration for Home Assistant that allows to send error reports about client's 
 
 The integration creates error watchers that monitor Home Assistant for various issues and report them every 24 hours. Available watchers:
 
-- `LoggerHandler` — collects all logs with `critical`, `error`, and `warning` levels (in raw and accumulated style)
-- `EntitiesStatusChecker` — collects information about entities with the `STATE_UNAVAILABLE` status
+- `LoggerHandler` — collects all logs with `critical`, `error`, and `warning` levels (in raw and accumulated style). The raw log file is written once a minute. Repeats of one message within 10 minutes are folded into one line with `repeats` and `first_ts`, to spare the disk (eMMC wear).
+- `EntitiesStatusChecker` — collects information about entities with the `STATE_UNAVAILABLE` status. It also reports:
+  - integrations that did not load (`setup_error`, `setup_retry`, …), with Home Assistant's reason and how many of the unavailable entities are theirs;
+  - devices whose every entity is `unknown`: no data ever arrived. Buttons, events and scenes do not count, being `unknown` by nature.
 - `HostHealthWatcher` — watches the host rather than Home Assistant, and reports as soon as it finds something, not every 24 hours:
   - host memory above 90% for 30 minutes;
   - memory rising day after day before it gets there;
