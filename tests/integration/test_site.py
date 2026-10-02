@@ -83,9 +83,7 @@ async def test_wrong_pinata_keys_are_caught_by_the_form(
     hass: HomeAssistant, installed, aioclient_mock
 ):
     aioclient_mock.clear_requests()
-    aioclient_mock.get(
-        "https://api.pinata.cloud/data/testAuthentication", status=401, json={}
-    )
+    aioclient_mock.get("https://api.pinata.cloud/data/testAuthentication", status=401, json={})
     result = await hass.config_entries.flow.async_init(
         DOMAIN,
         context={"source": config_entries.SOURCE_RECONFIGURE, "entry_id": installed.entry_id},
@@ -231,3 +229,56 @@ async def test_an_unclean_shutdown_before_this_start_is_reported(
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_a_device_without_data_is_reported(
+    hass: HomeAssistant, chain: FakeChain, pinata: FakePinata, freezer
+):
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    board_entry = MockConfigEntry(domain="mqtt", title="MQTT")
+    board_entry.add_to_hass(hass)
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=board_entry.entry_id, identifiers={("mqtt", "bs_poe")}, name="BS_POE"
+    )
+    sensor = er.async_get(hass).async_get_or_create(
+        "sensor", "mqtt", "bs_poe_temp", device_id=device.id, config_entry=board_entry
+    )
+    hass.states.async_set(sensor.entity_id, "unknown")
+
+    entry = await install(hass)
+    await advance(hass, freezer, timedelta(seconds=FIRST_ENTITIES_CHECK_DELAY + 1))
+    await settle(hass)
+
+    [cid] = chain.report_cids()
+    issue = open_report(pinata, cid).issue
+    assert issue["summary"].endswith("; 1 device(s) without data")
+    assert issue["details"]["devices_without_data"] == {
+        device.id: {"device_name": "BS_POE", "entities": [sensor.entity_id]}
+    }
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_repeats_of_one_error_fold_in_the_log_file(hass: HomeAssistant, installed, freezer):
+    from custom_components.robonomics_report_service.const import LOGS_PATH
+
+    for _ in range(10):
+        logging.getLogger("roombapy.remote_client").error("Can't connect to 192.168.13.83")
+    await hass.async_block_till_done()
+    await advance(hass, freezer, timedelta(seconds=61))
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    path = Path(hass.config.path(LOGS_PATH))
+    written = [json.loads(line) for line in path.read_text().splitlines()]
+    roomba = [line for line in written if line["name"] == "roombapy.remote_client"]
+    assert len(roomba) == 1
+
+    await advance(hass, freezer, timedelta(minutes=11))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    written = [json.loads(line) for line in path.read_text().splitlines()]
+    roomba = [line for line in written if line["name"] == "roombapy.remote_client"]
+    assert len(roomba) == 2 and roomba[1]["repeats"] == 9

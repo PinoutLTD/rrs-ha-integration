@@ -1,8 +1,8 @@
 import asyncio
 import hashlib
-import json
 import logging
 import os
+import time
 from datetime import timedelta
 from typing import Any
 
@@ -19,6 +19,7 @@ from ...const import (
     LOGS_PATH,
     REPORT_FILE_MAX_BYTES,
 )
+from ...log_buffer import WRITE_INTERVAL_SECONDS, LogBuffer
 from .error_watcher import ErrorWatcher
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,6 +41,10 @@ class LoggerHandler(ErrorWatcher):
 
         self._acc_lock = asyncio.Lock()
         self._log_lock = asyncio.Lock()
+
+        # Raw lines for the log file, written once a minute
+        self._log_buffer = LogBuffer()
+        self._write_timer_listener = None
 
         # Main log path and path for log rotation
         self._log_path = self.hass.config.path(LOGS_PATH)
@@ -64,6 +69,10 @@ class LoggerHandler(ErrorWatcher):
             self.hass, self._flush, timedelta(minutes=CHECK_LOGS_TIMEOUT)
         )
 
+        self._write_timer_listener = async_track_time_interval(
+            self.hass, self._write_buffered, timedelta(seconds=WRITE_INTERVAL_SECONDS)
+        )
+
     @callback
     def remove(self):
         if self._event_listener is not None:
@@ -73,6 +82,12 @@ class LoggerHandler(ErrorWatcher):
         if self._flush_timer_listener is not None:
             self._flush_timer_listener()
             self._flush_timer_listener = None
+
+        if self._write_timer_listener is not None:
+            self._write_timer_listener()
+            self._write_timer_listener = None
+        # What is still in memory, repeats included, goes to the file now.
+        self.hass.async_create_task(self._write_buffered(everything=True))
 
         _LOGGER.debug("LoggerHandler removed")
 
@@ -166,15 +181,25 @@ class LoggerHandler(ErrorWatcher):
         if exception:
             payload["exception"] = exception
 
-        line = json.dumps(payload, ensure_ascii=False) + "\n"
+        # Written once a minute, repeats folded (log_buffer.py).
+        self._log_buffer.add(payload, time.monotonic())
 
+    async def _write_buffered(self, _=None, everything: bool = False) -> None:
+        lines = self._log_buffer.drain(time.monotonic(), everything)
+        if not lines:
+            return
         async with self._log_lock:
-            await self.hass.async_add_executor_job(
-                self._append_log_with_rotation, line
-            )
+            await self.hass.async_add_executor_job(self._append_lines, lines)
+
+    def _append_lines(self, lines: list[str]) -> None:
+        for line in lines:
+            self._append_log_with_rotation(line)
 
     async def _flush(self, _=None) -> None:
         """Send one accumulated report per time window"""
+
+        # The report carries the log file: what is buffered goes there first.
+        await self._write_buffered()
         async with self._acc_lock:
             # If there were no logs, restart the timer
             if not self._accumulated_records:
