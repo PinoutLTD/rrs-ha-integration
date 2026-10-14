@@ -5,7 +5,7 @@
   "codeowners": [
     "@pinoutcloud"
   ],
-  "version": "1.1.0-beta.10",
+  "version": "1.1.0-beta.11",
   "dependencies": [
     "system_log",
     "recorder"
