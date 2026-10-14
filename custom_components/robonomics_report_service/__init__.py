@@ -8,6 +8,7 @@ from homeassistant.loader import async_get_integration
 
 from .const import (
     CONF_NETWORK,
+    CONF_REPORT_INTERVAL,
     CONF_SENDER_SEED,
     CREDS_STORAGE_KEY,
     DATALOG_QUEUE_STORAGE_KEY,
@@ -23,6 +24,7 @@ from .const import (
     OWNER_ADDRESS,
     PROBLEM_REPORT_SERVICE,
     PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
+    REPORT_INTERVAL_DEFAULT,
 )
 from .error_watchers.error_watchers_manager import ErrorWatchersManager
 from .exceptions import StorageError
@@ -117,8 +119,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     heartbeat.start()
     hass.data[DOMAIN][entry.entry_id][HEARTBEAT] = heartbeat
 
-    # Configure and start manager for errors watchers
-    error_watchers_manager = ErrorWatchersManager(hass)
+    # Configure and start manager for errors watchers. The interval is an
+    # option (Configure in the UI); entries made before it was one have none.
+    error_watchers_manager = ErrorWatchersManager(
+        hass, entry.options.get(CONF_REPORT_INTERVAL, REPORT_INTERVAL_DEFAULT)
+    )
     error_watchers_manager.setup_watchers()
     hass.data[DOMAIN][entry.entry_id][ERROR_WATCHERS_MANAGER] = (
         error_watchers_manager

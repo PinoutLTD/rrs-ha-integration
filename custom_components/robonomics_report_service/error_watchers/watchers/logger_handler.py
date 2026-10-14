@@ -13,7 +13,6 @@ from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.event import async_track_time_interval
 
 from ...const import (
-    CHECK_LOGS_TIMEOUT,
     DOMAIN,
     LOGS_BACKUP_PATH,
     LOGS_PATH,
@@ -28,8 +27,9 @@ _LOGGER = logging.getLogger(__name__)
 class LoggerHandler(ErrorWatcher):
     """Watcher that react to all warning/errors in logs"""
 
-    def __init__(self, hass: HomeAssistant):
+    def __init__(self, hass: HomeAssistant, interval_minutes: int):
         super().__init__(hass)
+        self._interval = interval_minutes
 
         self._event_listener = None
 
@@ -55,7 +55,7 @@ class LoggerHandler(ErrorWatcher):
 
     @callback
     def setup(self):
-        _LOGGER.debug("LoggerHandler initialized")
+        _LOGGER.debug("LoggerHandler initialized, reports every %d min", self._interval)
         # Preppere directory for logs
         self.hass.async_create_task(self._async_prepare_log_dir())
 
@@ -66,7 +66,7 @@ class LoggerHandler(ErrorWatcher):
 
         # Create timer to flush accumulated log records to send_report service
         self._flush_timer_listener = async_track_time_interval(
-            self.hass, self._flush, timedelta(minutes=CHECK_LOGS_TIMEOUT)
+            self.hass, self._flush, timedelta(minutes=self._interval)
         )
 
         self._write_timer_listener = async_track_time_interval(
@@ -240,10 +240,10 @@ class LoggerHandler(ErrorWatcher):
                 "summary": (
                     f"System log: {unique_number} unique issues, "
                     f"{total_number} occurrences "
-                    f"(last {CHECK_LOGS_TIMEOUT} min)"
+                    f"(last {self._interval} min)"
                 ),
                 "details": {
-                    "logs_timeout_minutes": CHECK_LOGS_TIMEOUT,
+                    "logs_timeout_minutes": self._interval,
                     "total_events": total_number,
                     "unique_events": unique_number,
                     "by_level_events": by_level_events,

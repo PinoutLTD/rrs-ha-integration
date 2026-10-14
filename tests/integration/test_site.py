@@ -5,22 +5,23 @@ import logging
 from datetime import timedelta
 from pathlib import Path
 
+import pytest
 from homeassistant import config_entries
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.data_entry_flow import FlowResultType, InvalidData
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 from robonomicsinterface import Keypair
 
 from custom_components.robonomics_report_service import host_health
 from custom_components.robonomics_report_service.const import (
-    CHECK_ENTITIES_TIMEOUT,
-    CHECK_LOGS_TIMEOUT,
+    CONF_REPORT_INTERVAL,
     DOMAIN,
     FIRST_ENTITIES_CHECK_DELAY,
     HEARTBEAT_STARTUP_DELAY,
     PROBLEM_REPORT_SERVICE,
+    REPORT_INTERVAL_DEFAULT,
 )
 from custom_components.robonomics_report_service.error_watchers.watchers import (
     host_health_watcher,
@@ -130,7 +131,8 @@ async def test_unavailable_entities_are_reported_after_start(
     issue = open_report(pinata, cid).issue
     assert issue["type"] == "entities_health_problems"
     assert "sensor.harness_probe" in issue["details"]["unavailable_entities"]["pure_entities"]
-    assert issue["details"]["check_timeout_minutes"] == CHECK_ENTITIES_TIMEOUT
+    assert issue["details"]["check_timeout_minutes"] == REPORT_INTERVAL_DEFAULT
+    assert issue["summary"].endswith(f"(interval {REPORT_INTERVAL_DEFAULT} min)")
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
@@ -142,13 +144,67 @@ async def test_errors_in_the_log_are_reported_once_a_day(
     logging.getLogger("custom_components.harness_probe").error("Probe failure number %s", 7)
     await hass.async_block_till_done()
 
-    await advance(hass, freezer, timedelta(minutes=CHECK_LOGS_TIMEOUT + 1))
+    # The default is the day it always was: nothing after an hour.
+    await advance(hass, freezer, timedelta(minutes=61))
+    await settle(hass)
+    assert log_reports(chain, pinata) == []
+
+    await advance(hass, freezer, timedelta(minutes=REPORT_INTERVAL_DEFAULT - 60))
     await settle(hass)
 
+    [logs] = log_reports(chain, pinata)
+    assert "Probe failure" in str(logs["details"])
+    assert logs["details"]["logs_timeout_minutes"] == REPORT_INTERVAL_DEFAULT
+    assert logs["summary"].endswith(f"(last {REPORT_INTERVAL_DEFAULT} min)")
+
+
+def log_reports(chain: FakeChain, pinata: FakePinata) -> list[dict]:
     issues = [open_report(pinata, cid).issue for cid in chain.report_cids()]
-    logs = [i for i in issues if i and i["type"] == "accumulated_system_log_problems"]
-    assert len(logs) == 1
-    assert "Probe failure" in str(logs[0]["details"])
+    return [i for i in issues if i and i["type"] == "accumulated_system_log_problems"]
+
+
+async def set_interval(hass: HomeAssistant, entry, minutes: int) -> dict:
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.FORM and result["step_id"] == "init"
+    return await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_REPORT_INTERVAL: minutes}
+    )
+
+
+async def test_an_hourly_interval_sends_the_reports_every_hour(
+    hass: HomeAssistant, installed, chain: FakeChain, pinata: FakePinata, freezer
+):
+    result = await set_interval(hass, installed, 60)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    # Saving reloads the integration; the site keeps its key and address.
+    assert installed.state is config_entries.ConfigEntryState.LOADED
+    assert installed.options == {CONF_REPORT_INTERVAL: 60}
+
+    probe = logging.getLogger("custom_components.harness_probe")
+    hass.states.async_set("sensor.harness_probe", STATE_UNAVAILABLE)
+    for hour in (1, 2):
+        probe.error("Probe failure in hour %s", hour)
+        await hass.async_block_till_done()
+        await advance(hass, freezer, timedelta(minutes=60))
+        await settle(hass)
+        assert len(log_reports(chain, pinata)) == hour
+
+    issues = [open_report(pinata, cid).issue for cid in chain.report_cids()]
+    logs = log_reports(chain, pinata)
+    assert all(i["details"]["logs_timeout_minutes"] == 60 for i in logs)
+    assert logs[-1]["summary"].endswith("(last 60 min)")
+    entities = [i for i in issues if i and i["type"] == "entities_health_problems"]
+    hourly = [i for i in entities if i["details"]["check_timeout_minutes"] == 60]
+    assert hourly and hourly[-1]["summary"].endswith("(interval 60 min)")
+    assert {record[0] for record in chain.records} == {SITE}
+
+
+async def test_the_interval_stays_between_an_hour_and_a_day(hass: HomeAssistant, installed):
+    for minutes in (59, 24 * 60 + 1):
+        with pytest.raises(InvalidData):
+            await set_interval(hass, installed, minutes)
+    assert installed.options == {}
 
 
 async def test_host_memory_above_the_limit_is_reported_once(

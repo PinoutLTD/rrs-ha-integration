@@ -6,11 +6,11 @@ from .watchers import EntitiesStatusChecker, ErrorWatcher, HostHealthWatcher, Lo
 class ErrorWatchersManager:
     """Class to manage different watchers for errors"""
 
-    def __init__(self, hass: HomeAssistant):
+    def __init__(self, hass: HomeAssistant, report_interval_minutes: int):
         self._started = False
         self.error_watchers: list[ErrorWatcher] = [
-            EntitiesStatusChecker(hass),
-            LoggerHandler(hass),
+            EntitiesStatusChecker(hass, report_interval_minutes),
+            LoggerHandler(hass, report_interval_minutes),
             HostHealthWatcher(hass),
         ]
 

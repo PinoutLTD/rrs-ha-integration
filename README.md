@@ -4,7 +4,7 @@ Integration for Home Assistant that allows to send error reports about client's 
 
 ## How it works
 
-The integration creates error watchers that monitor Home Assistant for various issues and report them every 24 hours. Available watchers:
+The integration creates error watchers that monitor Home Assistant for various issues and report them every 24 hours, or as often as the site is set to (see [Report interval](#report-interval)). Available watchers:
 
 - `LoggerHandler` — collects all logs with `critical`, `error`, and `warning` levels (in raw and accumulated style). The raw log file is written once a minute. Repeats of one message within 10 minutes are folded into one line with `repeats` and `first_ts`, to spare the disk (eMMC wear).
 - `EntitiesStatusChecker` — collects information about entities with the `STATE_UNAVAILABLE` status. It also reports:
@@ -86,6 +86,12 @@ When adding the integration, you need to specify the following fields:
 - (Optional) Robonomics address of subscription owner — by default, the integration creates its own Robonomics address for which you need to purchase a subscription; this field allows to specify another subscription to which you can add the integration address
 
 After that, the integration will generate a Robonomics account (and provide you with a seed phrase). You can also specify an existing account by providing your own seed phrase.
+
+### Report interval
+
+The log and entities reports go out once a day by default. To change that, open the integration in Settings → Devices & Services and press **Configure**: the interval is in minutes, from 60 to 1440. Saving reloads the integration; the seed, the address and the keys stay as they are, and nothing has to be entered again. Host health reports and the daily heartbeat keep their own schedule.
+
+An hour is the floor: the integrator's side reads the chain and files tickets once an hour, so a shorter interval would reach no ticket sooner. Every report carries the whole log tail, a few megabytes on Pinata, and one record of the subscription's free allowance, which all sites of a pool share; an hourly site writes about 50 records a day instead of 3.
 
 ## Testing
 
