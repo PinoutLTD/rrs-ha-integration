@@ -91,7 +91,13 @@ After that, the integration will generate a Robonomics account (and provide you 
 
 The log and entities reports go out once a day by default. To change that, open the integration in Settings → Devices & Services and press **Configure**: the interval is in minutes, from 60 to 1440. Saving reloads the integration; the seed, the address and the keys stay as they are, and nothing has to be entered again. Host health reports and the daily heartbeat keep their own schedule.
 
-An hour is the floor: the integrator's side reads the chain and files tickets once an hour, so a shorter interval would reach no ticket sooner. Every report carries the whole log tail, a few megabytes on Pinata, and one record of the subscription's free allowance, which all sites of a pool share; an hourly site writes about 50 records a day instead of 3.
+Below a day, a report goes out only when it says something new, and otherwise once a day as a reminder that the problem is still there:
+- the log report — when a message appears that the last report did not have; the counts of the old ones growing is not news;
+- the entities report — when the unavailable entities, the integrations not loaded or the devices without data change, a recovery included.
+
+So a site that always logs the same warnings costs about as much hourly as daily, and a new problem still reaches the integrator within the hour. At the daily interval every report goes out, as before. Skipped reports are not lost: the next one covers the whole time since the last one sent.
+
+An hour is the floor: the integrator's side reads the chain and files tickets once an hour, so a shorter interval would reach no ticket sooner. Every report carries the whole log tail, a few megabytes on Pinata, and one record of the subscription's free allowance, which all sites of a pool share.
 
 ## Testing
 

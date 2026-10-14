@@ -167,7 +167,9 @@ def fixture_pinata(monkeypatch, aioclient_mock) -> FakePinata:
     return pinata
 
 
-async def install(hass: HomeAssistant, seed: str = SENDER_SEED) -> config_entries.ConfigEntry:
+async def install(
+    hass: HomeAssistant, seed: str = SENDER_SEED, settle: bool = True
+) -> config_entries.ConfigEntry:
     """Go through the setup form as a person does."""
 
     result = await hass.config_entries.flow.async_init(
@@ -187,7 +189,8 @@ async def install(hass: HomeAssistant, seed: str = SENDER_SEED) -> config_entrie
         result["flow_id"], {"sender_seed": seed}
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY, result
-    await hass.async_block_till_done()
+    if settle:
+        await hass.async_block_till_done()
     return result["result"]
 
 

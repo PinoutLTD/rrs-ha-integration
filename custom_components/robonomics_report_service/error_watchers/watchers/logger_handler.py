@@ -19,6 +19,7 @@ from ...const import (
     REPORT_FILE_MAX_BYTES,
 )
 from ...log_buffer import WRITE_INTERVAL_SECONDS, LogBuffer
+from ...repeats import Repeats
 from .error_watcher import ErrorWatcher
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,6 +31,8 @@ class LoggerHandler(ErrorWatcher):
     def __init__(self, hass: HomeAssistant, interval_minutes: int):
         super().__init__(hass)
         self._interval = interval_minutes
+        # Sent when a signature is new, else once a day (repeats.py).
+        self._repeats = Repeats(interval_minutes)
 
         self._event_listener = None
 
@@ -209,6 +212,14 @@ class LoggerHandler(ErrorWatcher):
                 )
                 return
 
+            covered = self._repeats.due(
+                frozenset(self._accumulated_records), new_only=True
+            )
+            if not covered:
+                # Kept: the next report covers the time since the last one.
+                _LOGGER.debug("LoggerHandler: nothing new since the last report")
+                return
+
             period_end = dt_util.utcnow()
 
             entries = list(self._accumulated_records.values())
@@ -240,7 +251,7 @@ class LoggerHandler(ErrorWatcher):
                 "summary": (
                     f"System log: {unique_number} unique issues, "
                     f"{total_number} occurrences "
-                    f"(last {self._interval} min)"
+                    f"(last {covered * self._interval} min)"
                 ),
                 "details": {
                     "logs_timeout_minutes": self._interval,

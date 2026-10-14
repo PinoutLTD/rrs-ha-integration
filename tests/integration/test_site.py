@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 from datetime import timedelta
 from pathlib import Path
 
@@ -200,6 +201,49 @@ async def test_an_hourly_interval_sends_the_reports_every_hour(
     assert {record[0] for record in chain.records} == {SITE}
 
 
+async def test_hourly_the_same_problems_go_out_again_only_once_a_day(
+    hass: HomeAssistant, installed, chain: FakeChain, pinata: FakePinata, freezer
+):
+    # The harness runs the loop in debug mode, and moving the clock an hour
+    # makes a step "take 3600 s": that warning would be a new log signature,
+    # and new ones are sent at once.
+    hass.loop.slow_callback_duration = float("inf")
+    await set_interval(hass, installed, 60)
+    await hass.async_block_till_done()
+    probe = logging.getLogger("custom_components.harness_probe")
+    hass.states.async_set("sensor.harness_probe", STATE_UNAVAILABLE)
+
+    async def hour(*messages: str) -> None:
+        for message in messages:
+            probe.error(message)
+        await hass.async_block_till_done()
+        await advance(hass, freezer, timedelta(minutes=60))
+        await settle(hass)
+
+    def entity_reports() -> list[dict]:
+        issues = [open_report(pinata, cid).issue for cid in chain.report_cids()]
+        return [i for i in issues if i and i["type"] == "entities_health_problems"]
+
+    for _ in range(3):
+        await hour("The same failure")
+    assert len(log_reports(chain, pinata)) == 1
+    assert len(entity_reports()) == 1
+
+    # Something new goes out at once.
+    hass.states.async_set("sensor.harness_probe_2", STATE_UNAVAILABLE)
+    await hour("The same failure", "A different failure")
+    assert len(log_reports(chain, pinata)) == 2
+    assert len(entity_reports()) == 2
+
+    # The same again: a reminder a day later, covering the day.
+    for _ in range(24):
+        await hour("The same failure")
+    logs = log_reports(chain, pinata)
+    assert len(logs) == 3
+    assert logs[-1]["summary"].endswith("(last 1440 min)")
+    assert logs[-1]["details"]["logs_timeout_minutes"] == 60
+
+
 async def test_the_interval_stays_between_an_hour_and_a_day(hass: HomeAssistant, installed):
     for minutes in (59, 24 * 60 + 1):
         with pytest.raises(InvalidData):
@@ -285,6 +329,56 @@ async def test_an_unclean_shutdown_before_this_start_is_reported(
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_a_reload_right_after_setup_reports_the_shutdown_once(
+    hass: HomeAssistant, chain: FakeChain, pinata: FakePinata, monkeypatch
+):
+    # The interval set at once after installing: the entry reloads while the
+    # first watcher is still reading the recorder (slow on a large database).
+    await leave_a_frozen_run(hass, timedelta(minutes=1))
+    read = host_health_watcher.read_previous_run
+
+    def slow_read(session, started):
+        time.sleep(0.3)
+        return read(session, started)
+
+    monkeypatch.setattr(host_health_watcher, "read_previous_run", slow_read)
+
+    entry = await install(hass, settle=False)
+    result = await set_interval(hass, entry, 60)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await settle(hass)
+
+    issues = [open_report(pinata, cid).issue for cid in chain.report_cids()]
+    assert len([i for i in issues if i and i["type"] == "host_health"]) == 1
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def leave_a_frozen_run(hass: HomeAssistant, down: timedelta) -> None:
+    """What the recorder finds after a freeze: the old run marked incorrect."""
+
+    from homeassistant.components.recorder.db_schema import Events, RecorderRuns
+    from homeassistant.helpers.recorder import get_instance, session_scope
+
+    instance = get_instance(hass)
+    started = instance.recorder_runs_manager.recording_start
+
+    def write():
+        with session_scope(hass=hass) as session:
+            session.add(
+                RecorderRuns(
+                    start=started - timedelta(days=1),
+                    end=started,
+                    closed_incorrect=True,
+                    created=started - timedelta(days=1),
+                )
+            )
+            session.add(Events(time_fired_ts=(started - down).timestamp()))
+
+    await instance.async_add_executor_job(write)
 
 
 async def test_a_device_without_data_is_reported(

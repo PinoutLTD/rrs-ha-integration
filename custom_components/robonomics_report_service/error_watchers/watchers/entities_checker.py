@@ -20,6 +20,7 @@ from homeassistant.helpers.start import async_at_started
 
 from ... import entity_health
 from ...const import FIRST_ENTITIES_CHECK_DELAY
+from ...repeats import Repeats
 from .error_watcher import ErrorWatcher
 
 _LOGGER = logging.getLogger(__name__)
@@ -31,6 +32,8 @@ class EntitiesStatusChecker(ErrorWatcher):
     def __init__(self, hass: HomeAssistant, interval_minutes: int) -> None:
         super().__init__(hass)
         self._interval = interval_minutes
+        # Sent when the findings change, else once a day (repeats.py).
+        self._repeats = Repeats(interval_minutes)
 
         self.entity_registry = async_get_entity_registry(hass)
         self.devices_registry = async_get_devices_registry(hass)
@@ -138,6 +141,17 @@ class EntitiesStatusChecker(ErrorWatcher):
             # If nothing to report, skip
             if not unavailable_ids and not not_loaded and not silent:
                 self._period_start = period_end
+                self._repeats.forget()
+                return
+
+            findings = (
+                frozenset(unavailable_ids)
+                | {f"not_loaded:{e['domain']}:{e['title']}" for e in not_loaded}
+                | {f"without_data:{device_id}" for device_id in silent}
+            )
+            if not self._repeats.due(findings):
+                # Kept: the next report covers the time since the last one.
+                _LOGGER.debug("EntitiesStatusChecker: no change since the last report")
                 return
 
             # Check if entities is part of some device

@@ -9,6 +9,7 @@ a day.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
@@ -20,13 +21,17 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ... import host_health
-from ...const import HOST_HEALTH_STORAGE_KEY
+from ...const import DOMAIN, HOST_HEALTH_STORAGE_KEY
 from ...utils.ha_storage import async_load_from_store, async_save_to_store
 from .error_watcher import ErrorWatcher
 
 _LOGGER = logging.getLogger(__name__)
 
 MEMINFO_PATH = "/proc/meminfo"
+# The recorder run whose predecessor was checked, in this Home Assistant run.
+# Kept in hass.data, not by the watcher: a reload makes a new watcher, and it
+# must not report the same shutdown again.
+SHUTDOWN_CHECKED = f"{DOMAIN}.shutdown_checked"
 
 
 def read_previous_run(
@@ -77,20 +82,23 @@ class HostHealthWatcher(ErrorWatcher):
         self._started = dt_util.utcnow()
         self._period_start = self._started
         self._saved_day: str | None = None
-        # The recorder run whose predecessor was already checked: reloading the
-        # integration must not report the same shutdown again.
-        self._shutdown_checked: str | None = None
+        self._start_task: asyncio.Task | None = None
 
     def setup(self) -> None:
         self._timer = async_track_time_interval(
             self.hass, self._sample, host_health.SAMPLE_INTERVAL
         )
-        self.hass.async_create_task(self._async_start())
+        self._start_task = self.hass.async_create_task(self._async_start())
 
     def remove(self) -> None:
         if self._timer is not None:
             self._timer()
             self._timer = None
+        # A watcher removed while it checks the last shutdown (a reload right
+        # after setup) stops here; the next one checks again.
+        if self._start_task is not None:
+            self._start_task.cancel()
+            self._start_task = None
 
     async def _async_start(self) -> None:
         try:
@@ -102,7 +110,6 @@ class HostHealthWatcher(ErrorWatcher):
             day: [float(v[0]), int(v[1])] for day, v in (saved.get("daily") or {}).items()
         }
         self._memory.growth_reported_on = saved.get("growth_reported_on")
-        self._shutdown_checked = saved.get("shutdown_checked")
         self._saved_day = dt_util.utcnow().date().isoformat()
 
         await self._check_last_shutdown()
@@ -116,7 +123,7 @@ class HostHealthWatcher(ErrorWatcher):
             if not await instance.async_db_ready:
                 return
             started = instance.recorder_runs_manager.recording_start
-            if self._shutdown_checked == started.isoformat():
+            if self.hass.data.get(SHUTDOWN_CHECKED) == started.isoformat():
                 return
 
             def _read() -> tuple[bool, datetime | None] | None:
@@ -127,17 +134,16 @@ class HostHealthWatcher(ErrorWatcher):
         except Exception:
             _LOGGER.debug("Host health: cannot read the recorder's runs", exc_info=True)
             return
-        self._shutdown_checked = started.isoformat()
-        await self._persist()
-        if previous is None:
-            return
-
-        closed_incorrect, last_seen = previous
-        finding = host_health.shutdown_finding(
-            closed_incorrect, last_seen, started, await self._host_booted()
-        )
-        if finding is not None:
-            await self._report([finding], last_seen or started, started)
+        if previous is not None:
+            closed_incorrect, last_seen = previous
+            finding = host_health.shutdown_finding(
+                closed_incorrect, last_seen, started, await self._host_booted()
+            )
+            if finding is not None:
+                await self._report([finding], last_seen or started, started)
+        # Marked only once the report is handed off, with no await in between:
+        # cancelled before that, this watcher has sent nothing.
+        self.hass.data[SHUTDOWN_CHECKED] = started.isoformat()
 
     async def _sample(self, _: Any = None) -> None:
         try:
@@ -177,7 +183,6 @@ class HostHealthWatcher(ErrorWatcher):
                 {
                     "daily": self._memory.daily,
                     "growth_reported_on": self._memory.growth_reported_on,
-                    "shutdown_checked": self._shutdown_checked,
                 },
             )
         except Exception:
