@@ -44,5 +44,16 @@
       "already_configured": "[%key:common::config_flow::abort::already_configured_service%]",
       "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Robonomics Report Service",
+        "description": "How often the log and entities reports are sent, in minutes: from 60 to 1440 (once a day, the default). Host health reports and the daily heartbeat do not change.",
+        "data": {
+          "report_interval_minutes": "Report interval, minutes"
+        }
+      }
+    }
   }
 }

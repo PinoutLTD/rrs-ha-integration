@@ -2,13 +2,15 @@ from typing import Any, cast
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.config_entries import ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
+from homeassistant.core import callback
 from robonomicsinterface import Keypair, is_valid_address
 
 from .const import (
     CONF_NETWORK,
     CONF_PINATA_PUBLIC,
     CONF_PINATA_SECRET,
+    CONF_REPORT_INTERVAL,
     CONF_SENDER_EMAIL,
     CONF_SENDER_SEED,
     CREDS_STORAGE_KEY,
@@ -16,6 +18,8 @@ from .const import (
     NETWORK_POLKADOT,
     OWNER_ADDRESS,
     PROBLEM_SERVICE_ROBONOMICS_ADDRESS,
+    REPORT_INTERVAL_DEFAULT,
+    REPORT_INTERVAL_MIN,
 )
 from .exceptions import StorageError
 from .ipfs import async_check_pinata_keys
@@ -62,6 +66,20 @@ def reconfigure_schema(current: dict[str, Any]) -> vol.Schema:
     )
 
 
+def options_schema(current: dict[str, Any]) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_REPORT_INTERVAL,
+                default=current.get(CONF_REPORT_INTERVAL, REPORT_INTERVAL_DEFAULT),
+            ): vol.All(
+                vol.Coerce(int),
+                vol.Range(min=REPORT_INTERVAL_MIN, max=REPORT_INTERVAL_DEFAULT),
+            ),
+        }
+    )
+
+
 def address_errors(values: dict[str, Any]) -> dict[str, str]:
     errors: dict[str, str] = {}
     for field in (PROBLEM_SERVICE_ROBONOMICS_ADDRESS, OWNER_ADDRESS):
@@ -85,6 +103,11 @@ class ReportServiceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # The schema version of the entries that it creates
     # HA will call migrate method if the version changes
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> "ReportServiceOptionsFlow":
+        return ReportServiceOptionsFlow()
 
     def __init__(self):
         self._generated_seed: str | None = None
@@ -224,4 +247,18 @@ class ReportServiceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="reconfigure",
             data_schema=reconfigure_schema(current),
             errors=errors,
+        )
+
+
+class ReportServiceOptionsFlow(config_entries.OptionsFlowWithReload):
+    """Settings that do not touch the credentials: no secret is asked for.
+
+    Saving reloads the entry, so the watchers start again with the new interval.
+    """
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+        return self.async_show_form(
+            step_id="init", data_schema=options_schema(self.config_entry.options)
         )

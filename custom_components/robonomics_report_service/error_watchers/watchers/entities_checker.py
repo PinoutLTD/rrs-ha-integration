@@ -19,7 +19,7 @@ from homeassistant.helpers.event import async_call_later, async_track_time_inter
 from homeassistant.helpers.start import async_at_started
 
 from ... import entity_health
-from ...const import CHECK_ENTITIES_TIMEOUT, FIRST_ENTITIES_CHECK_DELAY
+from ...const import FIRST_ENTITIES_CHECK_DELAY
 from .error_watcher import ErrorWatcher
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,8 +28,9 @@ _LOGGER = logging.getLogger(__name__)
 class EntitiesStatusChecker(ErrorWatcher):
     """Periodic health-check for all entities (unavailable / not updated)"""
 
-    def __init__(self, hass: HomeAssistant) -> None:
+    def __init__(self, hass: HomeAssistant, interval_minutes: int) -> None:
         super().__init__(hass)
+        self._interval = interval_minutes
 
         self.entity_registry = async_get_entity_registry(hass)
         self.devices_registry = async_get_devices_registry(hass)
@@ -45,13 +46,13 @@ class EntitiesStatusChecker(ErrorWatcher):
 
     @callback
     def setup(self) -> None:
-        _LOGGER.debug("EntitiesStatusChecker start initializing")
+        _LOGGER.debug("EntitiesStatusChecker initialized, reports every %d min", self._interval)
 
         # Create timer to check entities and then call send_report service
         self._check_entities_timer_listener = async_track_time_interval(
             self.hass,
             self._check_entities,
-            timedelta(minutes=CHECK_ENTITIES_TIMEOUT),
+            timedelta(minutes=self._interval),
         )
         # The first check waits for Home Assistant to finish starting and then
         # a little longer: entities are set up and leave "unavailable" only
@@ -156,12 +157,12 @@ class EntitiesStatusChecker(ErrorWatcher):
                 "summary": entity_health.summary(
                     unavailable_counts["entities"],
                     unavailable_counts["devices"],
-                    CHECK_ENTITIES_TIMEOUT,
+                    self._interval,
                     len(not_loaded),
                     len(silent),
                 ),
                 "details": {
-                    "check_timeout_minutes": CHECK_ENTITIES_TIMEOUT,
+                    "check_timeout_minutes": self._interval,
                     "counts": {
                         "unavailable_counts": unavailable_counts,
                     },

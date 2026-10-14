@@ -45,7 +45,12 @@ REPORT_FILE_MAX_BYTES = 3 * 1024 * 1024
 LOGS_PATH = f"{DOMAIN}/home-assistant.log"
 LOGS_BACKUP_PATH = f"{DOMAIN}/home-assistant.log.1"
 
-CHECK_LOGS_TIMEOUT = 24 * 60  # Mins
-CHECK_ENTITIES_TIMEOUT = 24 * 60  # Mins
+# How often the log and entities reports go out, per site (options flow).
+CONF_REPORT_INTERVAL = "report_interval_minutes"
+REPORT_INTERVAL_DEFAULT = 24 * 60  # Mins, the interval before it could be set
+# Not below an hour: the connector reads the chain and the bridge files tickets
+# once an hour, so a shorter interval reaches no ticket sooner, and only uses up
+# the pool's free weight, the datalog ring buffer (127 records) and Pinata.
+REPORT_INTERVAL_MIN = 60  # Mins
 # After Home Assistant has started, before the first entities check.
 FIRST_ENTITIES_CHECK_DELAY = 120  # Seconds
