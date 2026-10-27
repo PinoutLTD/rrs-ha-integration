@@ -768,7 +768,7 @@ wheels = [
 
 [[package]]
 name = "robonomics-interface"
-version = "3.0.0rc2"
+version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pynacl" },
@@ -776,9 +776,9 @@ dependencies = [
     { name = "websockets" },
     { name = "xxhash" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/eb/7b/5229d09df6646cda8387f25123ad0443b01113db33ce5b73f89be159ac41/robonomics_interface-3.0.0rc2.tar.gz", hash = "sha256:b016a532e619a79fd8b1241362d770431fe4d620aadc5be8ea893155818dc89c", size = 245942, upload-time = "2026-09-27T09:22:46.682Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/67/1e/003e6d72fa07d1421af4451dfcb7b5c44ad431bd481db17f7acc634ea937/robonomics_interface-3.0.0.tar.gz", hash = "sha256:8cd94ca0091d4cabc91ce99688f9d896b98c254b0e0dad46e1f4b254c6ec7008", size = 265520, upload-time = "2026-10-27T08:44:03.432Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b5/72/314730336b27e47bfa5b025bf9ebca8cbcc14053961abfbbd261bc88495e/robonomics_interface-3.0.0rc2-py3-none-any.whl", hash = "sha256:86aa0201f410898e2ea4ba5888e7f3f12077cc15fee7a3f94b9c91939d0078cb", size = 66085, upload-time = "2026-09-27T09:22:45.486Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/63/eaccd88741c515de438660d9ef963299885df45e62062dbadbd1f7a80037/robonomics_interface-3.0.0-py3-none-any.whl", hash = "sha256:507d06df3aae53302b1da1f6791ec2b3376b1452daad7b598c0af4be8799ec02", size = 66326, upload-time = "2026-10-27T08:44:02.224Z" },
 ]
 
 [[package]]
@@ -804,7 +804,7 @@ requires-dist = [
     { name = "pinatapy-vourhey", specifier = "==0.1.9" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.0" },
-    { name = "robonomics-interface", specifier = "==3.0.0rc2" },
+    { name = "robonomics-interface", specifier = "==3.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.8" },
 ]
 provides-extras = ["dev"]

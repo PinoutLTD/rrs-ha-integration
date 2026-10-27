@@ -14,7 +14,7 @@
     "hassio"
   ],
   "requirements": [
-    "robonomics-interface==3.0.0rc2",
+    "robonomics-interface==3.0.0",
     "pinatapy-vourhey==0.1.9"
   ],
   "documentation": "https://wiki.robonomics.network/",
